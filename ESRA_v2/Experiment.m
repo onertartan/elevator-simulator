@@ -1,0 +1,224 @@
+classdef Experiment < handle
+    properties
+        exitFlag = false
+    end
+   
+    methods
+        
+        function  run(experiment,startData,app)
+            controller = Controller(startData.decisionMaker);           %Create a Controller object
+            dataConf = DataConf(startData);                             %Create a DataConf object based on Gui/configuration file
+            numMaxConfs = struct("Nbc",length(dataConf.BUILDING),"Ncc",length(dataConf.CAR),"Nicc",size(dataConf.TRAFFIC,1),"Nifc",size(dataConf.TRAFFIC,2) ); %building, car, traffic
+            simulator = Simulator(startData,numMaxConfs);               %Create a Simulator object
+           
+            
+            for nbc=1:numMaxConfs.Nbc                                   %Repeat for the number of buildinging configurations
+                building = dataConf.BUILDING{nbc};
+                for ncc=1:numMaxConfs.Ncc                               %Repeat for the number of car configurations
+                    cars=dataConf.CAR{ncc};                    
+                    for iccIndex=1:numMaxConfs.Nicc                     % Repeat for each (incoming, interfloor, outgoing) traffic combination
+                        for ifcIndex=1:numMaxConfs.Nifc                 % (outgoing traffic is determined from  (incoming,interfloor) pair) 
+                            traffic = dataConf.TRAFFIC{iccIndex,ifcIndex};
+                            if ~isempty(traffic)                        %Check valid traffic configuration in the Traffic configuration matrix
+                                
+                                traffic.setRouteProbability(building);  %set route,arrival and destination probabilities
+                                controller.setTraffic(traffic);
+                                for nsc=1:simulator.numSimulations      %Repeat for the maximum number of simulations
+                                    indices=struct('nbc',nbc,'ncc',ncc,'int',ifcIndex,'inc',iccIndex,'nsc',nsc);
+                                    simulator.confIndices= indices;
+                                    
+                                    simulator.totalRunCounter = simulator.totalRunCounter +1;
+                            
+                                    [cars,HC,P]=experiment.resetVariables(simulator,building,cars,dataConf,traffic,indices); %Reset cars, HC, P and simulator time before each new simulation
+                                    %%simulator.checkNewPassenger(HC,P,traffic,indices);%%BUNA GEREK VAR MI? while'in içinde zaten kontrol ediliyor ve her defasında 2 yolcu ile başlamasına yol açıyor.
+                                    %if(dataConf.isInitialDispatch==0 )%%BUNA GEREK VAR MI? while içinde time=0 için zaten rundecisionProcess'i çalıştıyor
+                                    %    controller.runDecisionProcess(building,cars,HC,P);
+                                    %    controller.updateCarStatesForNextDecision(cars);
+                                    %end
+                                    simulator.displayTraffic(building,traffic,cars,HC,P, app,nsc);  
+                                    pause(1);
+                                    %While there is an waiting car(transferring passenger or moving) or maximum simulation time is not reached                                     
+
+                                    while any([cars.stopOverCounter]) || any([cars.DF]) || any([cars.state])  ||  ( simulator.arrivalRate~=0 &&  simulator.arrivalRate~=inf && simulator.time<Simulator.getSetEndTime() ) || ~isempty(P.waiting{1}) || ~isempty(P.waiting{2})
+                                       tic    %tic %measure a calculation
+                                       simulator.checkNewPassenger(HC,P,traffic);
+                                    
+                                       if mod(simulator.time,simulator.arrivalRate)==0 ||  mod(simulator.time,simulator.decisionPeriod)==0  %if a new passenger has arrived or redispatching period is reached
+                                      %   if  (mod(simulator.time,simulator.arrivalRate)==0)   %run decision process only if a new passenger has arrived
+                                            controller.runDecisionProcess(building,cars,HC,P);
+                                        end
+                                        simulator.displayTraffic(building,traffic,cars,HC,P, app,nsc);  
+                                        controller.operate(cars,simulator,HC,P);
+                                        controller.updateCarStatesForNextDecision(cars);
+                                        drawnow
+                                       
+                                       if experiment.exitFlag
+                                           return;
+                                       end
+                                       experiment.pauseCheck(app);
+                                        if experiment.terminationCheck(app)
+                                            return;
+                                        end
+                                       simulator.totalRunTime= simulator.totalRunTime+toc; 
+                                    end
+                                    simulator.recordData(HC,P,cars,dataConf,indices);
+                                 
+                                  
+                                   
+                                end
+                                   simulator.displayTraffic(building,traffic,cars,HC,P, app,nsc); 
+                            end
+                            
+                        end
+
+                    end
+
+                end
+            end
+            assignin("base","dataConf",dataConf);
+            Experiment.saveResults(dataConf,numMaxConfs,simulator.numSimulations );
+        end
+        
+        function [cars,HC,P]= resetVariables(~,simulator,building, cars,dataConf,traffic,indices)
+            
+            simulator.time=0;    % Reset simulation time at each simulation start
+            Passenger.resetId(); % Reset static Passenger id
+            HallCall.resetId();  % Reset static HallCall id
+            %Reset CAR, active HC and active P for new simulation
+            switch simulator.dataType
+                case {1,2}  %1: New Data 2: Recorded Data
+                    HC=HallCallLists();
+                    for i =1:length(cars)
+                        cars(i)=copy(cars(i));
+                    end
+                    %reset floor
+                    %CAR.floor=randi(Build.nf,1,nc);           %random car floors
+                    %CAR.floor=round((1:nc)*Build.nf/(nc+1)); %CAr floors for : Equal intervals
+                    %CAR.floor=Build.nf/2*ones(1,nc);         %cars start from mid-floor
+                    if length(cars)>1
+                        evenlyDistributedFloors = num2cell( round(linspace(1,building.nf,length(cars) )) );
+                        [cars.floor] = deal( evenlyDistributedFloors{:}) ; %evenly distributed cars
+                    elseif length(cars)==1
+                        cars(1).floor =1;randi(building.nf);% aynı sonuçları elde ettiğimizi ispatlamak için 1 yapıyoruz.
+                    end
+                    for i =1:length(cars)
+                        cars(i).reset();
+                    end
+                    
+                    if simulator.dataType==1%simulator.dataType=1 new data
+                        P=PassengerLists();
+                        for i = 1:Traffic.getSetNumInitialPassengers() 
+                            simulator.generatePassenger(HC,P,traffic);
+                        end
+                        
+                    else %simulator.dataType =2 recorded data
+                        [nbc, ncc, inc, int, nsc] = deal(indices.nbc,indices.ncc,indices.inc,indices.int,indices.nsc);
+                        P=copy(dataConf.RECold{nbc, ncc, inc, int, nsc}.P);
+                        simulator.checkNewPassenger(HC,P,traffic);%Load  P_waiting from P_served
+                    end
+                case 3     %3: New data with custom initials
+                    cars= copy(dataConf.initialCars);
+                    P=copy(dataConf.initialP);               %passengers at initial
+                    HC=copy(dataConf.initialHC);
+            end
+            
+        end
+        
+
+
+        function  termination = terminationCheck(exp,app)
+            if exp.exitFlag
+                termination=true;
+                return;
+            end
+            if app.stopFlag%getappdata(app.UIFigure, 'stopExperiment')
+                pause(0.001); % Short pause to reduce CPU usage
+                cla(app.displayFlowUIAxes, 'reset');
+                app.displayFlowUIAxes.Visible = 'off';
+                termination=true;
+            else
+                termination = false;
+            end
+        end
+
+
+        function pauseCheck(exp,app)        
+            while  app.pauseFlag
+                pause(0.001); % Short pause to reduce CPU usage
+                if  exp.terminationCheck(app)
+                    return
+                end
+            end
+
+        end
+
+
+    end
+ 
+    methods(Static)
+    
+
+        function saveResults(dataConf,numMaxConfs,NS)
+            Pawt = zeros(numMaxConfs.Nbc,numMaxConfs.Ncc,numMaxConfs.Nicc, numMaxConfs.Nifc);
+            nFloorMin =dataConf.BUILDING{1}.nf;
+            nFloorMax =dataConf.BUILDING{numMaxConfs.Nbc}.nf;
+            nCarMin =length(dataConf.CAR{1});
+            nCarMax =length(dataConf.CAR{numMaxConfs.Ncc});
+            incomingMin = dataConf.TRAFFIC{1,1}.inc;
+            incomingMax = dataConf.TRAFFIC{end,end}.inc;
+            interfloorMin =dataConf.TRAFFIC{1,1}.int;
+            interfloorMax =dataConf.TRAFFIC{end,end}.int;
+
+            fileName =sprintf('NumFloors-%d-%d-NumCars-%d-%dIncomingTraffic-%d-%d-InterfloorTraffic-%d-%d-NumSims-%d.xlsx', nFloorMin, nFloorMax,nCarMin,nCarMax,incomingMin,incomingMax,interfloorMin,interfloorMax,NS);
+            for nbc=1:numMaxConfs.Nbc                            %Repeat for the number of buildinging configurations
+                nfloor = dataConf.BUILDING{nbc}.nf;
+                for ncc=1:numMaxConfs.Ncc                         %Repeat for the number of car configurations
+                    ncars= length(dataConf.CAR{ncc}); 
+                     % Initialize table to store results
+                    PawtTable = zeros(numMaxConfs.Nicc, numMaxConfs.Nifc);
+                    HCawtTable = zeros(numMaxConfs.Nicc, numMaxConfs.Nifc);
+
+                    for iccIndex=1:numMaxConfs.Nicc               % Repeat for each (incoming, interfloor, outgoing) traffic combination
+                            for ifcIndex=1:numMaxConfs.Nifc  
+                               tempPawt=[];
+                               tempHCawt=[];
+                            for ns=1:NS                          
+                                p_up=dataConf.RECnew{nbc,ncc,iccIndex,ifcIndex,ns}.P.served{1};
+                                p_down=dataConf.RECnew{nbc,ncc,iccIndex,ifcIndex,ns}.P.served{2};
+                                hc_up=dataConf.RECnew{nbc,ncc,iccIndex,ifcIndex,ns}.HC.served{1};
+                                hc_down=dataConf.RECnew{nbc,ncc,iccIndex,ifcIndex,ns}.HC.served{2};
+                                tempPawt=[tempPawt  mean([p_up([p_up.QJT]~=-1).WT p_down([p_down.QJT]~=-1).WT]) ];
+                                tempHCawt=[tempHCawt  mean([hc_up([hc_up.QJT]~=-1).WT hc_down([hc_down.QJT]~=-1).WT]) ];
+                            end
+                            Pawt(nbc,ncc,iccIndex,ifcIndex)=mean(tempPawt);
+                            PawtTable(iccIndex, ifcIndex) = mean(tempPawt);  % Store in table format
+                            
+                            HCawt(nbc,ncc,iccIndex,ifcIndex)=mean(tempHCawt);
+                            HCawtTable(iccIndex, ifcIndex) = mean(tempHCawt);  % Store in table format
+                        end
+                    end
+                    % Convert array to table and add row & column names
+                    rowNames = arrayfun(@(x) sprintf('Incoming_%d', x), incomingMin:incomingMax, 'UniformOutput', false);
+                    colNames = arrayfun(@(x) sprintf('Interfloor_%d', x), interfloorMin:interfloorMax, 'UniformOutput', false);
+                    Tp = array2table(PawtTable, 'RowNames', rowNames, 'VariableNames', colNames);
+                    Tp.Properties.DimensionNames{1} = 'Average Passenger Waiting Time';
+                    Thc = array2table(HCawtTable, 'RowNames', rowNames, 'VariableNames', colNames);
+                    Thc.Properties.DimensionNames{1} = 'Average Hall Call Waiting Time';
+                    % Define sheet name based on nbc and ncc
+                    sheetName = sprintf('NumFloors-%d-NumCars-%d', nfloor, ncars);
+
+                    % Write table to Excel file
+                    writetable(Tp, fileName, 'Sheet', sheetName, 'WriteRowNames', true);
+                    startRowThc = size(Tp, 1) + 1 + 2;  % +1 for Tp header, +2 for spacing
+                    rangeThc = sprintf('A%d', startRowThc);
+                    % Write Thc below Tp
+                    writetable(Thc, fileName, 'Sheet', sheetName, 'WriteRowNames', true, 'Range', rangeThc);
+
+                end
+             end
+          assignin("base","Pawt",Pawt)
+        end
+
+    end
+   
+end
