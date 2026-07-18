@@ -300,16 +300,27 @@ class Simulator:
         # [S8] alighting/alightProgress drive the walk-to-landing-platform
         # animation: ids of passengers currently between the car doors and
         # the platform, plus the shared 0..1 walk fraction for this tick.
-        return [{
-            "id": car.id,
-            "floor": float(car.floor),
-            "state": int(car.state),
-            "stopOverCounter": float(car.stopOverCounter),
-            "load": int(car.load),
-            "DF": sorted(car.DF),
-            "alighting": [a["id"] for a in car.alighting],
-            "alightProgress": car.alightProgress(),
-        } for car in cars]
+        # [S9] 'alight' is the {DF: passenger count} map the sprite
+        # renderer's destination-circle badges expect (flow_view [N1]);
+        # it counts passengers still riding inside the car.
+        out = []
+        for car in cars:
+            alight: Dict[Any, int] = {}
+            for dir_ in (1, 2):
+                for p in car.P.travelling[dir_]:
+                    alight[p.DF] = alight.get(p.DF, 0) + 1
+            out.append({
+                "id": car.id,
+                "floor": float(car.floor),
+                "state": int(car.state),
+                "stopOverCounter": float(car.stopOverCounter),
+                "load": int(car.load),
+                "DF": sorted(car.DF),
+                "alight": alight,
+                "alighting": [a["id"] for a in car.alighting],
+                "alightProgress": car.alightProgress(),
+            })
+        return out
 
     def drawHCs(self, P: Any, HC: Any) -> Dict[int, List[Dict[str, Any]]]:
         out: Dict[int, List[Dict[str, Any]]] = {1: [], 2: []}

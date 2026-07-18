@@ -24,6 +24,19 @@ Visual mapping (1:1 with the MATLAB drawBackground/drawCars/drawHCs):
        sprites; orientation alone conveys up/down. The green/red
        triangle above a cabin is unchanged (it shows the car's own
        travel direction, not an assignment).
+  [N3] Landing platform (engine [A1]/[S8]): when the frame carries
+       landingPlatform=True, one extra green-tinted column is drawn
+       right of the last car lane, the x-range and axis ticks widen by
+       one ("Exit"), and passengers alighting during the transfer phase
+       walk from the cabin to the platform: person sprites tinted in
+       the car's colour, placed at x = lerp(cabin, platform,
+       alightProgress), over a dotted guide line while the walk is in
+       progress. A shared walk FRACTION means every car reaches the
+       platform in the same passengerTransferTime regardless of how far
+       its lane is from the right edge. The walkers vanish when the
+       engine clears 'alighting' (transfer counted back to zero,
+       requirement 3). Frames without the flag (e.g. older recorded
+       test frames) render exactly as before.
 """
 
 from __future__ import annotations
@@ -65,6 +78,7 @@ class TrafficFlowView(pg.PlotWidget):
         self.addItem(self._image)
         self._use_sprites = True
         self._last_frame = None
+        self._platform_x: Optional[float] = None    # [N3] column centre
 
     # ------------------------------------------------------------------
     def set_use_sprites(self, enabled: bool) -> None:
@@ -84,19 +98,25 @@ class TrafficFlowView(pg.PlotWidget):
 
         nf = frame["nf"]
         numCars = frame["numCars"]
+        platform = bool(frame.get("landingPlatform"))           # [N3]
+        self._platform_x = float(numCars + 3) if platform else None
+        extra = 1 if platform else 0
         plot = self.plotItem
 
         plot.clear()
         # ---- background checkerboard (drawBackground) -----------------
-        img = np.ones((nf, 2 + numCars, 3))
+        img = np.ones((nf, 2 + numCars + extra, 3))
         img[0::2, 0, :] = 0.85
         img[1::2, 0, :] = 0.70
         img[0::2, 1, :] = 0.70
         img[1::2, 1, :] = 0.85
+        if platform:                                            # [N3]
+            img[0::2, -1] = (0.88, 0.95, 0.88)   # landing platform,
+            img[1::2, -1] = (0.78, 0.90, 0.78)   # green checkerboard
         self._image = pg.ImageItem((img * 255).astype(np.ubyte),
                                    axisOrder="row-major")
         # imagesc semantics: cell centres on integer coordinates, y up
-        self._image.setRect(QRectF(0.5, 0.5, numCars + 2, nf))
+        self._image.setRect(QRectF(0.5, 0.5, numCars + 2 + extra, nf))
         plot.addItem(self._image)
 
         traffic = frame["traffic"]
@@ -123,11 +143,13 @@ class TrafficFlowView(pg.PlotWidget):
         bottom = plot.getAxis("bottom")
         ticks = [(1, "Up"), (2, "Down")] + [
             (i + 2, f"Car-{i}") for i in range(1, numCars + 1)]
+        if platform:                                            # [N3]
+            ticks.append((numCars + 3, "Exit"))
         bottom.setTicks([ticks])
         # [V1] with the aspect locked, the Y range is authoritative: the
         # X range recomputes itself to keep cells square, centring the
         # building horizontally in whatever width the widget has.
-        plot.setXRange(0.5, numCars + 2.5, padding=0)
+        plot.setXRange(0.5, numCars + 2.5 + extra, padding=0)
         plot.setYRange(0.5, nf + 0.5, padding=0)
 
         if self._use_sprites:
@@ -168,6 +190,9 @@ class TrafficFlowView(pg.PlotWidget):
             label.setFont(QFont("Segoe UI", 12, QFont.Bold))
             label.setPos(cid + 2, floor)
             plot.addItem(label)
+
+            # alighting passengers walking to the landing platform [N3]
+            self._draw_walkers_simple(plot, car, colour)
 
         # ---- hall calls (drawHCs) ---------------------------------------
         for dir_, calls in flow["hallCalls"].items():
@@ -256,6 +281,9 @@ class TrafficFlowView(pg.PlotWidget):
             label.setPos(x0 + 0.83, floor + 0.31)
             plot.addItem(label)
 
+            # alighting passengers walking to the landing platform [N3]
+            self._draw_walkers_sprites(plot, car, colour)
+
         # ---- hall calls: waiting people + direction arrow ----------------
         for dir_, calls in flow["hallCalls"].items():
             dir_ = int(dir_)
@@ -289,6 +317,61 @@ class TrafficFlowView(pg.PlotWidget):
                 tri.setBrush(QBrush(colour))
                 tri.setPen(pg.mkPen("#ffffff", width=1))
                 plot.addItem(tri)
+
+    # ------------------------------------------------------------------
+    # [N3] alighting-walk helpers (shared geometry for both renderers)
+    # ------------------------------------------------------------------
+    def _walk_x(self, car) -> Optional[float]:
+        """Walker x-position: lerp(cabin centre, platform centre, progress).
+        None when there is nothing to draw (no walkers / no platform)."""
+        if self._platform_x is None or not car.get("alighting"):
+            return None
+        prog = min(1.0, max(0.0, float(car.get("alightProgress", 0.0))))
+        x_from = car["id"] + 2.0                 # cabin centre
+        return x_from + (self._platform_x - x_from) * prog
+
+    def _draw_walkers_sprites(self, plot, car, colour) -> None:
+        """Person sprites in the car's colour walking to the platform,
+        over a dotted guide line from the cabin doors to the platform."""
+        wx = self._walk_x(car)
+        if wx is None:
+            return
+        floor = car["floor"]
+        guide = QColor(colour)
+        guide.setAlpha(110)
+        plot.addItem(pg.PlotDataItem(
+            [car["id"] + 2.5, self._platform_x], [floor, floor],
+            pen=pg.mkPen(guide, width=2, style=Qt.DotLine)))
+        ids = car["alighting"]
+        n = min(len(ids), 3)
+        person = sprites.person_sprite(QColor(colour))
+        for k in range(n):
+            px = wx + (k - (n - 1) / 2) * 0.26
+            self._add_sprite(plot, person, px - 0.11, floor - 0.42,
+                             0.22, 0.55)
+        if len(ids) > 3:
+            more = pg.TextItem(f"x{len(ids)}", color="k", anchor=(0.5, 0.5))
+            more.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            more.setPos(wx, floor + 0.36)
+            plot.addItem(more)
+
+    def _draw_walkers_simple(self, plot, car, colour) -> None:
+        """Legacy-mode walkers: a filled dot in the car's colour sliding
+        along the floor line towards the platform column."""
+        wx = self._walk_x(car)
+        if wx is None:
+            return
+        floor = car["floor"]
+        dot = QGraphicsEllipseItem(wx - 0.18, floor - 0.18, 0.36, 0.36)
+        dot.setBrush(QBrush(colour))
+        dot.setPen(_EDGE_PEN)
+        plot.addItem(dot)
+        n = len(car["alighting"])
+        if n > 1:
+            cnt = pg.TextItem(str(n), color="k", anchor=(0.5, 0.5))
+            cnt.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            cnt.setPos(wx, floor + 0.34)
+            plot.addItem(cnt)
 
     # ------------------------------------------------------------------
     @staticmethod

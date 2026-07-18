@@ -80,7 +80,7 @@
   "simulation": {
     "data_type": 1,
     "file_name": "",
-    "num_initial_passengers": 14,
+    "num_initial_passengers": 13,
     "parameter_search": false,
     "number_of_runs": 1,
     "simulation_duration": 15,
