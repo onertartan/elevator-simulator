@@ -4,17 +4,26 @@ decision/dispatcher.py
 Abstract base class for dispatching logic, extending DecisionMaker.
 (User's conversion of Dispatcher.m, with fixes [P3]-[P4].)
 
+CERTIFIED against matlab_src/decision/Dispatcher.m (original uploaded
+2026-07): run()'s ordering matches the original exactly -
+dispatch -> updateCarServiceLists -> updateCarStates(
+stateUpdateTypeForNextDecision). (The .m source comment records that a
+hardcoded 'fixed' was once replaced by the property - the port uses
+the property, matching the final original.)
 
-  [P11] run() forwards self.traffic into dispatch(), matching the
-       trailing `~` parameter that NearestCarDispatcher.m ignores.
-       Will it be necessary in any subclass?
+  [P11] certified deviation: the original calls
+       dispatch(building, cars, HC, P) with NO traffic argument (and
+       the base setTraffic is an empty stub - see [P2]). The port
+       forwards self.traffic as a 5th argument that current
+       subclasses accept as traffic=None and ignore - a compatible
+       superset kept for traffic-aware subclasses (e.g. MDP).
 
-NOTE (physics-relevant, kept from the user's Dispatcher.m conversion):
-run() updates car states as its step 3, IN ADDITION to Controller's
+NOTE (physics-relevant, CERTIFIED against the original): run()
+updates car states as its step 3, IN ADDITION to Controller's
 per-tick updateCarStatesForNextDecision after operate. A freshly
-assigned car therefore starts moving in the SAME tick it is dispatched.
-The test suite's reference trip reflects this (boarding at t=2).
-Upload Dispatcher.m to certify this ordering against the original.
+assigned car therefore starts moving in the SAME tick it is
+dispatched, exactly as in Dispatcher.m. The test suite's reference
+trip reflects this (boarding at t=2).
 """
 from abc import abstractmethod
 from typing import Any, List

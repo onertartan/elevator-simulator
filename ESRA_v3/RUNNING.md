@@ -11,7 +11,8 @@
 Then in the window:
   * Building & Car tab ... pick floors/cars (small first: 8 floors, 3 cars)
   * Traffic tab .......... select "Passenger Arrival Rate", e.g. 4 s/passenger
-  * Control Method tab ... select "Nearest Car Method"  (only runnable one yet)
+  * Control Method tab ... "Nearest Car Method", or Metaheuristics/GA
+                           (objective: Conventional/Destination Information)
   * Simulation tab ....... duration e.g. 25, initial passengers e.g. 2
   * Display tab .......... "Display traffic flow" on, Display speed 2-3
                            (5 = fastest; 1 = one frame per second)
@@ -20,7 +21,10 @@ Then in the window:
     dataConf (reload it via Simulation tab -> Recorded Traffic, *.pkl).
 
 ## 3. Still MATLAB-only (pending upload/port)
-  * GA.m / ACO.m / PSO.m / DE.m + objFun*.m  (Metaheuristics path)
-  * MDP path, configurationNewDataWithCustomInitials.m (dataType 3)
-  * Dispatcher.m / DecisionMaker.m originals - please upload to certify
-    the reconstructed decision/ base classes ([P1]-[P7] notes inside).
+  * ACO.m / PSO.m / DE.m  (GA + objFunConventional1/objFunDestination
+    are ported; remaining objFuns: Number of Passengers, user-defined)
+  * MDP path (dataType 3 'New Traffic with Custom Initials' is now
+    ported - configuration.py [F4]-[F7], matlab_src/utils originals)
+  * (Dispatcher.m / DecisionMaker.m originals uploaded - decision/
+    base classes CERTIFIED; findings in decision/decision_maker.py
+    and decision/dispatcher.py docstrings.)

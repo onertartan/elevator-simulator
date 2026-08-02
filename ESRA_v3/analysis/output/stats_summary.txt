@@ -1,0 +1,33 @@
+GA parameter search: 1350 configurations x 10 runs = 13500 executions
+cost = best estimated mean waiting time (s); lower is better
+
+WINNER (lowest mean over runs):
+  Pc=0.5  Pm=0.1  tournament + scattered + uniform
+  mean 9.271 s  std 0.020  median 9.255  range [9.255, 9.294]
+
+MATLAB-DEFAULT configuration (Pc=0.8, Pm=0.01, stochunif+scattered+uniform):
+  mean 9.890 s  std 0.678
+  winner improves on it by 6.3 %  (one-sided Mann-Whitney U=17, p=0.005394)
+
+FACTOR EFFECTS (balanced design -> eta^2 = exact share of total variance):
+  Pc           eta^2=0.1413  F=444.2 p=0  KW H=1489.0 p=0
+  Mutation fn  eta^2=0.1287  F=498.3 p=0  KW H=1904.3 p=0
+  Selection    eta^2=0.1144  F=871.5 p=0  KW H=1767.7 p=0
+  Crossover fn eta^2=0.0758  F=553.1 p=1.32e-231  KW H=1149.4 p=2.52e-250
+  Pm           eta^2=0.0468  F=165.7 p=9.16e-139  KW H=655.6 p=1.45e-140
+
+Friedman omnibus across 1350 configurations (runs as blocks): chi2=8453.2, p=0
+  (blocks are matched only if runs shared seeds across configurations; otherwise read as approximate and rely on Kruskal-Wallis above)
+
+WINNER vs ranks 2-10 (one-sided Mann-Whitney, Holm-adjusted):
+  vs Pc 0.8 Pm 0.2 tourn+scatter+swap       p=0.3512  p_holm=1.0000  not significant
+  vs Pc 0.4 Pm 0.1 tourn+scatter+frequency  p=0.1428  p_holm=1.0000  not significant
+  vs Pc 0.4 Pm 0.2 tourn+scatter+frequency  p=0.5882  p_holm=1.0000  not significant
+  vs Pc 0.5 Pm 0.2 tourn+scatter+uniform    p=0.3031  p_holm=1.0000  not significant
+  vs Pc 0.8 Pm 0.2 tourn+scatter+frequency  p=0.3497  p_holm=1.0000  not significant
+  vs Pc 0.8 Pm 0.1 tourn+scatter+frequency  p=0.1428  p_holm=1.0000  not significant
+  vs Pc 0.6 Pm 0.2 tourn+scatter+uniform    p=0.2252  p_holm=1.0000  not significant
+  vs Pc 0.4 Pm 0.1 tourn+singlep+frequency  p=0.1340  p_holm=1.0000  not significant
+  vs Pc 0.7 Pm 0.2 tourn+twopoin+frequency  p=0.1340  p_holm=1.0000  not significant
+
+NOTE: all runs optimize the same dispatch snapshot; consider replicating the top configs on 2-3 further traffic snapshots for external validity.

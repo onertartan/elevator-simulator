@@ -50,10 +50,15 @@ Deviations from MATLAB ([S1]-[S7] inline):
        platform); drawCars adds per-car 'alighting' (passenger ids in
        transit to the platform) and 'alightProgress' (0..1 walk
        fraction); the frame carries landingPlatform=True so the
-       renderer can detect the +1-column layout. NOTE: alight() is now
-       recorded at arrival + doorOpeningTime, so trip times grow by
-       doorOpeningTime versus the old instantaneous dropoff (waiting
-       times Pawt/HCawt are unaffected - WT freezes at boarding).
+       renderer can detect the +1-column layout.
+
+  [S10] Phased boarding (car.py [A4]): drawCars adds per-car
+       'pendingBoard' (standing at the hall lane while doors open),
+       'boarding' (walking lane -> cabin) and 'boardProgress'.
+       Metrics with BOTH phases: board() and alight() are each recorded
+       at arrival + doorOpeningTime, so Pawt grows by doorOpeningTime,
+       HCawt is unchanged (calls answered at arrival), and TrT returns
+       to its pre-phased values (both endpoints shift equally).
 
 Formatting note: MATLAB used sprintf('%d', ...) on sums that are doubles
 (exact integers for Ts = 1); _fmtInt reproduces the integer look and
@@ -303,6 +308,10 @@ class Simulator:
         # [S9] 'alight' is the {DF: passenger count} map the sprite
         # renderer's destination-circle badges expect (flow_view [N1]);
         # it counts passengers still riding inside the car.
+        # [S10] pendingBoard/boarding/boardProgress drive the boarding
+        # walk (car.py [A4]): passengers standing at the hall lane while
+        # the doors open, then walking lane -> cabin during the transfer
+        # phase, sharing the same 0..1 fraction convention as [S8].
         out = []
         for car in cars:
             alight: Dict[Any, int] = {}
@@ -319,6 +328,10 @@ class Simulator:
                 "alight": alight,
                 "alighting": [a["id"] for a in car.alighting],
                 "alightProgress": car.alightProgress(),
+                "pendingBoard": [{"id": e["p"].id, "dir": e["dir"]}
+                                 for e in car.pendingBoard],
+                "boarding": [dict(b) for b in car.boarding],
+                "boardProgress": car.boardProgress(),
             })
         return out
 

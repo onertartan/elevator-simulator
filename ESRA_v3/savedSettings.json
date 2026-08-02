@@ -3,13 +3,13 @@
     "floor_height": 3.0,
     "floors": {
       "range": [
-        5,
-        5
+        20,
+        20
       ],
-      "fixed": 5,
+      "fixed": 20,
       "step": "1",
-      "min_label": "5",
-      "max_label": "5",
+      "min_label": "20",
+      "max_label": "20",
       "lamp_fixed_on": true
     },
     "cars": {
@@ -48,7 +48,7 @@
     "lamp_fixed_on": true
   },
   "control": {
-    "method": "nearest",
+    "method": "meta",
     "objective_function": "Destination Information",
     "algorithm": "GA",
     "population_size": 100,
@@ -78,9 +78,9 @@
     ]
   },
   "simulation": {
-    "data_type": 1,
-    "file_name": "",
-    "num_initial_passengers": 13,
+    "data_type": 3,
+    "file_name": "E:/oner/elevator-simulator/ESRA_v3/initials_file.xlsx",
+    "num_initial_passengers": 0,
     "parameter_search": false,
     "number_of_runs": 1,
     "simulation_duration": 15,

@@ -230,12 +230,15 @@ class Experiment:
         alighting terms keep the loop alive through the alight and the
         sprite clean-up; in ordinary door configurations they are only
         non-empty while the counter is non-zero, so they change nothing.
+        The pendingBoard / boarding terms ([A4]) are the mirror for the
+        boarding side (pendingBoard is doubly covered by P.waiting).
         """
         return (
             any(c.stopOverCounter for c in cars)
             or any(c.DF for c in cars)          # non-empty destination sets
             or any(c.state for c in cars)
-            or any(c.pendingAlight or c.alighting for c in cars)   # [D10]
+            or any(c.pendingAlight or c.alighting
+                   or c.pendingBoard or c.boarding for c in cars)   # [D10]
             or (simulator.arrivalRate != 0
                 and not math.isinf(simulator.arrivalRate)
                 and simulator.time < Simulator.getSetEndTime())

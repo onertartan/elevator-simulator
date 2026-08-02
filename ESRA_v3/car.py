@@ -27,6 +27,12 @@ class Car:
     """
 
     # Static color set (initialized on first use)
+    # Deviation from MATLAB Car.m ['r','g','c','m','y','b','w','k','r','g']:
+    # 'w' (invisible on the white lanes, clashes with the unassigned
+    # hall-call white) and 'k' (clashes with text and the unassigned
+    # grey tint) are replaced by orange / maroon, and the duplicated
+    # trailing 'r','g' by purple / olive - so every car's waiting
+    # passengers stay identifiable by tint alone.
 
     _colors = [
         QColor("red"),
@@ -35,10 +41,10 @@ class Car:
         QColor("magenta"),
         QColor("yellow"),
         QColor("blue"),
-        QColor("white"),
-        QColor("black"),
-        QColor("red"),
-        QColor("green"),
+        QColor("orange"),
+        QColor("maroon"),
+        QColor("purple"),
+        QColor("olive"),
     ]
 
     @classmethod
@@ -154,6 +160,16 @@ class Car:
         self.pendingAlight: List[Any] = []
         self.alighting: List[dict] = []
 
+        # Phased boarding ([A4]):
+        #   pendingBoard - {'p': Passenger, 'dir': 1|2} selected at
+        #                  arrival, still standing at the hall lane (and
+        #                  still in the waiting lists) until doors open
+        #   boarding     - {'id', 'dir'} dicts of passengers walking from
+        #                  the hall lane to the cabin during the transfer
+        #                  phase (visual only; already in 'travelling')
+        self.pendingBoard: List[dict] = []
+        self.boarding: List[dict] = []
+
         self.HC_up_above = []
         self.HC_up_below = []
         self.HC_down_above = []
@@ -188,8 +204,8 @@ class Car:
         if self.isAtDF():   # if the car is at a destination floor, start the door cycle
             self.beginDropoff()
 
-        if self.isAtHC(): # if the car is at a call floor, pick passengers up
-            self.pickup(HC, P, currentTime)
+        if self.isAtHC(): # at a call floor: answer the call, queue boarders [A4]
+            self.beginPickup(HC, P, currentTime)
 
         self.updateDoorCycle(P, currentTime)
 
@@ -237,13 +253,19 @@ class Car:
         # behaviour). Without this guard, sprites already walking to the
         # platform would snap back to the doors and re-walk. The doors
         # reopening means their transfer is over: clear them.
-        if self.alighting and self.stopOverCounter > doorsOpenAt + eps:
-            self.alighting.clear()
+        if self.stopOverCounter > doorsOpenAt + eps:
+            if self.alighting:
+                self.alighting.clear()
+            if self.boarding:          # [A4] walkers count as inside now
+                self.boarding.clear()
 
         # Phase 3 entry: transfer time has counted back to zero -> the
         # passengers moved to the landing platform disappear.
-        if self.alighting and self.stopOverCounter <= transferDoneAt + eps:
-            self.alighting.clear()
+        if self.stopOverCounter <= transferDoneAt + eps:
+            if self.alighting:
+                self.alighting.clear()
+            if self.boarding:          # [A4] boarders are inside the cabin
+                self.boarding.clear()
 
         # Phase 2 entry: door-opening time has counted back to zero ->
         # passengers alight NOW (requirement 1). Stats are recorded here
@@ -259,16 +281,40 @@ class Car:
                 self.alighting.append({"id": passenger.id, "DF": passenger.DF})
             self.pendingAlight.clear()
 
+        # [A4] Door-open, boarding side: the passengers selected at the
+        # hall call board NOW - WT freezes here (arrival +
+        # doorOpeningTime) - and start walking from the hall lane to the
+        # cabin. Runs AFTER the alighting block so alighters free their
+        # space first: load stays <= capacity even on combined stops.
+        if self.pendingBoard and self.stopOverCounter <= doorsOpenAt + eps:
+            for entry in self.pendingBoard:
+                passenger, dir_ = entry["p"], entry["dir"]
+                P.transfer(passenger, "travelling")
+                passenger.board(self.id, currentTime)
+                self.P.transfer(passenger, "travelling")
+                if passenger.DF not in self.DF:
+                    self.DF.add(passenger.DF)
+                self.load += 1
+                self.boarding.append({"id": passenger.id, "dir": dir_})
+            self.pendingBoard.clear()
+
     def alightProgress(self) -> float:
+        """[A1] Walk fraction cabin -> landing platform (see _walkProgress)."""
+        return self._walkProgress(self.alighting)
+
+    def boardProgress(self) -> float:
+        """[A4] Walk fraction hall lane -> cabin (see _walkProgress)."""
+        return self._walkProgress(self.boarding)
+
+    def _walkProgress(self, walkers: List[dict]) -> float:
         """
-        [A1] Fraction of the walk from the car to the landing platform:
-        0.0 the moment the doors open, 1.0 when the passenger reaches the
-        platform. Because displayTraffic snapshots the frame BEFORE
-        operate() decrements the counter, the visible ramp for a 3 s
-        transfer (Ts=1) is 0.33 -> 0.67 -> 1.0, then the sprites vanish
-        (requirement 3). Used by Simulator.drawCars for the animation.
+        [A1]/[A4] Fraction of a transfer-phase walk: 0.0 the moment the
+        doors open, 1.0 at the far end. Because displayTraffic snapshots
+        the frame BEFORE operate() decrements the counter, the visible
+        ramp for a 3 s transfer (Ts=1) is 0.33 -> 0.67 -> 1.0, then the
+        sprites vanish. Used by Simulator.drawCars for the animations.
         """
-        if not self.alighting:
+        if not walkers:
             return 0.0
         if self.passengerTransferTime <= 0:
             return 1.0
@@ -276,9 +322,27 @@ class Car:
         progress = (doorsOpenAt - self.stopOverCounter) / self.passengerTransferTime
         return min(1.0, max(0.0, progress))
 
-    def pickup(self, HC: HallCallLists, P: PassengerLists, currentTime: float) -> None:
+    def beginPickup(self, HC: HallCallLists, P: PassengerLists, currentTime: float) -> None:
         """
-        Handle boarding at the current floor based on direction and capacity.
+        [A4] Arrival at a hall-call floor: answer the call and start the
+        door cycle, but the passengers stay on the landing until the
+        doors are open. Mirror of beginDropoff [A1]:
+          - hall calls transfer to 'served' NOW, so HCawt is unchanged
+            (the call is answered when the car arrives) and isAtHC()
+            cannot retrigger;
+          - the boarders are selected NOW with the original capacity
+            check and leftover hall-call recreation (identical timing);
+          - the selected passengers go to pendingBoard but STAY in the
+            waiting lists, so their WT keeps counting while the doors
+            open: Pawt grows by doorOpeningTime versus the old
+            instantaneous pickup;
+          - board()/transfers/load/DF happen in updateDoorCycle at the
+            door-open moment, AFTER the alighting block, so on combined
+            stops the load never exceeds capacity any more (this
+            retires the [A2] transient-overload caveat).
+        The stop-over counter is only (re)started when at least one
+        passenger is accepted, preserving the original quirk that a
+        call floor with nobody left waiting does not hold the car.
         """
         # Determine service direction at this floor
         up_here = any(hc.floor == self.floor for hc in self.HC.waiting[1])
@@ -298,32 +362,22 @@ class Car:
             self.HC.transfer(call)
             HC.transfer(call)
 
-        # Determine waiting passengers at this floor and direction
-        passengers_here = [p for p in self.P.waiting[dir_] if p.floor == self.floor]
-        # [A2] Pre-refactor, dropoff freed capacity in the same tick before
-        # pickup ran. Alighting is now deferred to the door-open moment, so
-        # passengers still counted in `load` but pending alight at THIS
-        # floor (pendingAlight is always for the current floor) are treated
-        # as already gone - preserving the original capacity outcomes.
-        # `load` may therefore exceed capacity transiently until they alight.
-        available_space = self.capacity - self.load + len(self.pendingAlight)
+        # Waiting passengers here, minus any already queued by a stop-over
+        # restart (same-floor re-pickup) in this door cycle
+        pending_here = [e["p"] for e in self.pendingBoard]
+        passengers_here = [p for p in self.P.waiting[dir_]
+                           if p.floor == self.floor and p not in pending_here]
+        # [A2] capacity credit for passengers about to alight at THIS
+        # floor, debit for boarders already selected in this stop-over
+        available_space = (self.capacity - self.load
+                           + len(self.pendingAlight) - len(self.pendingBoard))
         if available_space < len(passengers_here):
             # Recreate a hall call for remaining passengers at this floor
             HC.add(HallCall(self.floor, currentTime, dir_))
 
-        num_accept = min(available_space, len(passengers_here))
-        passengers = passengers_here[:num_accept]
-
-        for passenger in passengers:
-            P.transfer(passenger, "travelling")
-            passenger.board(self.id, currentTime)
-            self.P.transfer(passenger, "travelling")
-
-            # Add unique destination floors to DF
-            if passenger.DF not in self.DF:
-                self.DF.add(passenger.DF)
-
-            self.load += 1
+        num_accept = max(0, min(available_space, len(passengers_here)))
+        for passenger in passengers_here[:num_accept]:
+            self.pendingBoard.append({"p": passenger, "dir": dir_})
             self.stopOverCounter = float(self.stopOverTime)
 
     def updateState(self, updateType: str) -> None:

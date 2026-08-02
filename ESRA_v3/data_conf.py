@@ -37,9 +37,8 @@ Deviations from MATLAB (marked [C1]..[C5] inline):
        output arguments (signature mismatch with case 1) and discards
        them - dead/legacy code. Ported as a loud NotImplementedError.
 
-configurationNewData / configurationNewDataWithCustomInitials are
-separate MATLAB function files not yet ported; DataConf imports them
-lazily from a `configuration` module so they can be dropped in later.
+configurationNewData / configurationNewDataWithCustomInitials are both
+ported in configuration.py; DataConf imports them lazily.
 """
 from __future__ import annotations
 

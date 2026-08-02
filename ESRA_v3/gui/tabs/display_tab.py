@@ -5,6 +5,9 @@ Tab 5: 'Display Tab'. Ported from the MATLAB source:
 
   * Checkboxes: 'Display traffic flow' (default on),
                 'Display tabular data' (default on).
+    Python-only additions: 'Sprite graphics' (default on) and
+    'Show waiting counts' (default on) - the latter toggles the
+    per-hall-call waiting-passenger count badges (flow_view [N5]).
   * 'Display speed' slider, Limits [1 5], default 3.
   * Traffic-flow plot area (pyqtgraph TrafficFlowView).
   * Tables with the exact row/column headers from the source:
@@ -78,9 +81,12 @@ class DisplayTab(QWidget):
         self.display_tabular_data.setChecked(True)
         self.sprite_graphics = QCheckBox("Sprite graphics")
         self.sprite_graphics.setChecked(True)
+        self.show_wait_counts = QCheckBox("Show waiting counts")
+        self.show_wait_counts.setChecked(True)
         controls.addWidget(self.display_traffic_flow)
         controls.addWidget(self.display_tabular_data)
         controls.addWidget(self.sprite_graphics)
+        controls.addWidget(self.show_wait_counts)
         controls.addSpacing(30)
         controls.addWidget(QLabel("Display speed"))
         self.speed_slider = QSlider(Qt.Horizontal)
@@ -133,6 +139,8 @@ class DisplayTab(QWidget):
         # ---- wiring (checkbox callbacks) --------------------------------
         self.display_traffic_flow.toggled.connect(self.flow_view.setVisible)
         self.sprite_graphics.toggled.connect(self.flow_view.set_use_sprites)
+        self.show_wait_counts.toggled.connect(
+            self.flow_view.set_show_wait_counts)
         self.display_tabular_data.toggled.connect(self._toggle_tables)
 
     def _toggle_tables(self, visible):

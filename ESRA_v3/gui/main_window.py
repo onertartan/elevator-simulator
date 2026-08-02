@@ -120,15 +120,35 @@ class ElevatorSimulatorWindow(QMainWindow):
                                 "Sum of intervals cannot be greater than 100.")
             return
         # Build the decision maker (MATLAB start-callback equivalent)
-        from decision import NearestCarDispatcher
+        from decision import NearestCarDispatcher, GA
         if start_data["controlMethod"] == "NearestCar":
             start_data["decisionMaker"] = NearestCarDispatcher(
                 SimpleNamespace(**start_data))
+        elif (start_data["controlMethod"] == "Metaheuristics"
+              and start_data.get("algorithm") == "GA"):
+            # Objective Function dropdown -> ported objective ([P13]);
+            # objFunConventional1 and objFunDestination exist so far.
+            from decision.meta.obj_funs import (objFunConventional1,
+                                                objFunDestination)
+            objFuns = {"Conventional Information": objFunConventional1,
+                       "Destination Information": objFunDestination}
+            objFun = objFuns.get(start_data["objectiveFunction"])
+            if objFun is None:
+                QMessageBox.warning(
+                    self, "Not ported yet",
+                    f"Objective function "
+                    f"'{start_data['objectiveFunction']}' is not ported "
+                    "yet; ported so far: 'Conventional Information' "
+                    "and 'Destination Information'.")
+                return
+            start_data["objFun"] = objFun
+            start_data["decisionMaker"] = GA(SimpleNamespace(**start_data))
         else:
             QMessageBox.warning(
                 self, "Not ported yet",
-                "Only the Nearest Car Method is runnable so far; "
-                "GA/ACO/PSO/DE and MDP ports are pending.")
+                "Runnable so far: Nearest Car Method and "
+                "Metaheuristics/GA; ACO/PSO/DE and MDP ports are "
+                "pending.")
             return
         # Simulator statics, exactly as the MATLAB start callback set them
         from simulator import Simulator
