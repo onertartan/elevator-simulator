@@ -147,10 +147,16 @@ def test_ga_determinism():
 
 def test_parameter_search_sweep():
     """[P29] grid machinery on a shrunken grid: fitnesses shape, mean
-    over runs, and the !!! last-configuration return quirk."""
+    over runs, the !!! last-configuration return quirk, and the [P36]
+    auto-save."""
+    import glob
+    import shutil
+    import tempfile
     target = [1, 2, 2, 1]
+    tmp = tempfile.mkdtemp(prefix="esra_ga_sweep_")
     disp = GA(make_start_data(parameterSearch=True, numberOfRuns=2,
-                              G=15, nPop=20, seed=3))
+                              G=15, nPop=20, seed=3,
+                              paramSearchSaveDir=tmp))
     disp.nVar, disp.maxLabel = len(target), 2
     disp.PARAM_SEARCH_GRID = {
         "crossoverValues": [0.5, 0.8],
@@ -166,7 +172,15 @@ def test_parameter_search_sweep():
                        disp.fitnesses.mean(axis=5))
     # !!! the returned pair is the LAST configuration's result
     assert cost == disp.fitnesses[-1, -1, -1, -1, -1, -1]
-    print("PASS  parameterSearch sweep: shapes, means, last-run return")
+    # [P36] auto-save: .npz always (+ .mat when scipy is installed)
+    saved = sorted(glob.glob(os.path.join(tmp, "ga_param_search_*.npz")))
+    assert len(saved) == 1, saved
+    with np.load(saved[0]) as z:
+        assert z["fitnesses"].shape == (2, 1, 1, 1, 2, 2)
+        assert np.allclose(z["mean_fitnesses"], disp.meanFitnesses)
+    shutil.rmtree(tmp)
+    print("PASS  parameterSearch sweep: shapes, means, last-run return, "
+          "auto-save [P36]")
 
 
 # ---------------------------------------------------------------------

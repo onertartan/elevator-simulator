@@ -17,6 +17,7 @@ Top-level window. Ports the MATLAB app's toolbar behaviour:
 import json
 import math
 import os
+import sys
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -141,6 +142,11 @@ class ElevatorSimulatorWindow(QMainWindow):
                     "yet; ported so far: 'Conventional Information' "
                     "and 'Destination Information'.")
                 return
+            if start_data.get("parameterSearch"):
+                # [W1] GA parameter search delegates to the parallel
+                # sweep runner on the custom-initials snapshot
+                self._launch_parameter_sweep(start_data)
+                return
             start_data["objFun"] = objFun
             start_data["decisionMaker"] = GA(SimpleNamespace(**start_data))
         else:
@@ -170,6 +176,57 @@ class ElevatorSimulatorWindow(QMainWindow):
         self.toolbar.start_btn.setEnabled(False)
         self.tabs.setCurrentWidget(self.display_tab)
         self.worker.start()
+
+    # ---- [W1] GA parameter search -> parallel sweep runner -----------
+    @staticmethod
+    def _sweep_command(start_data):
+        """Command line for analysis/run_parallel_sweep.py assembled
+        from the current GUI settings (objective, GA budget, initials
+        workbook)."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        objective = ("conventional"
+                     if start_data["objectiveFunction"].startswith(
+                         "Conventional")
+                     else "destination")
+        return [sys.executable,
+                os.path.join(root, "analysis", "run_parallel_sweep.py"),
+                "--initials", start_data["fileName"],
+                "--objective", objective,
+                "--pop", str(start_data["nPop"]),
+                "--gens", str(start_data["G"]),
+                "--runs", str(start_data["numberOfRuns"])]
+
+    def _launch_parameter_sweep(self, start_data):
+        """[W1] Run the GA parameter search through
+        analysis/run_parallel_sweep.py in its own console window:
+        parallel workers at below-normal priority, [P36]-compatible
+        auto-saved results. Requires the fixed custom-initials
+        scenario (dataType 3) so the swept snapshot is reproducible -
+        the engine-internal sequential sweep is no longer reachable
+        from the GUI."""
+        import subprocess
+        if start_data.get("dataType") != 3 or not start_data.get("fileName"):
+            QMessageBox.warning(
+                self, "Parameter search",
+                "Parameter search optimizes a fixed scenario workbook.\n"
+                "On the Simulation tab select 'New Traffic with Custom "
+                "Initials', pick the initials .xlsx, then press Start "
+                "again.")
+            return
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+        subprocess.Popen(self._sweep_command(start_data),
+                         creationflags=flags if os.name == "nt" else 0,
+                         cwd=root)
+        QMessageBox.information(
+            self, "Parameter search started",
+            "The parallel sweep is running in its own console window.\n"
+            "Workers run at below-normal priority; closing this app "
+            "does NOT stop the sweep - press Ctrl+C in that console to "
+            "stop it (partial results are still saved).\n\n"
+            "Results auto-save to matlab_src/results/ as\n"
+            "ga_param_search_parallel_<timestamp>.npz / .mat / "
+            "_meta.json.")
 
     def _pause(self):
         if self.pause_flag:                        # resume

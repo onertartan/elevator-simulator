@@ -48,6 +48,14 @@ Deviation notes (continuing the [P#] family):
        is banker's. nXover uses floor(x + 0.5) to match MATLAB.
   [P31] gaMethod is not sent by the Python GUI; read with default 1
        (GA.m line 5 property default).
+  [P36] Auto-save (deviation): after a parameterSearch sweep the
+       tensors are ALSO written to disk as
+       ga_param_search_<timestamp>.npz (numpy, always) and .mat
+       (when scipy is available), under startData.paramSearchSaveDir
+       (default matlab_src/results/; set None to disable). MATLAB
+       stopped at the assignin('base', ...) - closing MATLAB without
+       a manual save() lost the whole sweep. A failed save never
+       raises: the tensors always remain on the dispatcher.
 
 MATLAB quirks preserved (flagged !!!):
   * !!! In parameterSearch mode every configuration overwrites
@@ -57,7 +65,9 @@ MATLAB quirks preserved (flagged !!!):
 """
 from __future__ import annotations
 
+import datetime
 import math
+import os
 from typing import Any, Callable, List, Sequence, Tuple
 
 import numpy as np
@@ -65,13 +75,19 @@ import numpy as np
 from .metaheuristic_dispatcher import MetaheuristicDispatcher
 from .mutate import mutate
 
+# [P36] default target for the parameterSearch auto-save
+_DEFAULT_SAVE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)))),
+    "matlab_src", "results")
+
 
 class GA(MetaheuristicDispatcher):
     """Label-encoded genetic algorithm dispatcher (port of GA.m)."""
 
     # [P29] GA.m optimize() lines 27-31 - the parameterSearch sweep grid
     PARAM_SEARCH_GRID = {
-        "crossoverValues": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+        "crossoverValues": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8,0.9],
         "mutationValues": [0.01, 0.02, 0.05, 0.1, 0.2],
         "selectionFunctions": ["selectionstochunif", "selectionroulette",
                                "selectiontournament"],
@@ -92,6 +108,8 @@ class GA(MetaheuristicDispatcher):
                                          "selectionstochunif")       # [P27]
         self.fitnesses: np.ndarray | None = None                     # [P29]
         self.meanFitnesses: np.ndarray | None = None
+        self.paramSearchSaveDir: Any = getattr(
+            start_data, "paramSearchSaveDir", _DEFAULT_SAVE_DIR)     # [P36]
 
     # ------------------------------------------------------------------
     def optimize(self, objFunWrapper: Callable) -> Tuple[np.ndarray, float]:
@@ -150,8 +168,41 @@ class GA(MetaheuristicDispatcher):
         if self.parameterSearch:                             # [P29]
             self.fitnesses = fitnesses
             self.meanFitnesses = fitnesses.mean(axis=5)
+            self._saveParamSearch()                          # [P36]
 
         return bestSolution, bestCost
+
+    # ------------------------------------------------------------------
+    def _saveParamSearch(self) -> None:
+        """[P36] Persist the sweep tensors right after the sweep -
+        MATLAB only pushed them into the base workspace, so a forgotten
+        manual save() lost the run. Writes .npz always and .mat when
+        scipy is present; a save failure is reported, never raised."""
+        if not self.paramSearchSaveDir:
+            return
+        try:
+            os.makedirs(self.paramSearchSaveDir, exist_ok=True)
+            stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            base = os.path.join(self.paramSearchSaveDir,
+                                f"ga_param_search_{stamp}")
+            data = {"fitnesses": self.fitnesses,
+                    "mean_fitnesses": self.meanFitnesses}
+            np.savez(base + ".npz", **data)
+            saved = [base + ".npz"]
+            try:
+                from scipy.io import savemat     # optional dependency
+                savemat(base + ".mat", data)
+                saved.append(base + ".mat")
+            except ImportError:
+                print("parameterSearch: scipy not installed - "
+                      ".mat skipped (.npz saved)")
+            print("parameterSearch results saved:")
+            for path in saved:
+                print(f"  {path}")
+        except Exception as exc:      # never lose a finished sweep to I/O
+            print(f"parameterSearch: auto-save FAILED ({exc}); tensors "
+                  "remain on the dispatcher as "
+                  ".fitnesses/.meanFitnesses")
 
     # ------------------------------------------------------------------
     def _runGA(self, objFunWrapper: Callable, crossoverRate: float,

@@ -49,7 +49,7 @@
   },
   "control": {
     "method": "meta",
-    "objective_function": "Destination Information",
+    "objective_function": "Conventional Information",
     "algorithm": "GA",
     "population_size": 100,
     "max_iterations": 50,
@@ -79,7 +79,7 @@
   },
   "simulation": {
     "data_type": 3,
-    "file_name": "E:/oner/elevator-simulator/ESRA_v3/initials_file.xlsx",
+    "file_name": "E:/oner/elevator-simulator/ESRA_v3/initials_file_orj.xlsx",
     "num_initial_passengers": 0,
     "parameter_search": false,
     "number_of_runs": 1,
