@@ -41,11 +41,15 @@ Deviation notes (continuing the [P#] family):
        is empty; the port guards those assignments (MIN/MAKS keep
        their previous value, which is then never read).
 
+  [P37] intFloor = 1/velocityFps = floorHeight/velocity - the
+       dimensionally-correct inter-floor travel time (2 s at the GUI
+       defaults: 3 m floors / 1.5 m/s), so estimated travel and
+       stop-over costs share real seconds. Deviation by decision
+       (2026-08): ESRA_v2 used 1/velocity (m/s); the corrected
+       objFunConventional1.m already reads velocityFps, and BOTH
+       Python objectives now follow it.
+
 MATLAB quirks preserved (flagged !!!):
-  * !!! intFloor = 1/cars(1).velocity with velocity in m/s (not
-    velocityFps). The dimensionally-correct inter-floor time would be
-    1/velocityFps (= floorHeight/velocity); kept as-is for identical
-    costs.
   * !!! The idle-car direction decision WRITES car.state, and MATLAB
     cars are handle objects - so the decision made while scoring
     chromosome row n LEAKS into rows n+1.. of the same call. The port
@@ -100,7 +104,7 @@ def objFunConventional1(cars: List[Any], HC: Sequence[int],
     chrom = np.asarray(chrom)
     HC_arr = np.asarray(HC, dtype=int)   # floor numbers, 1..nf
     numHC = len(HC_arr)
-    intFloor = 1.0 / cars[0].velocity          # !!! m/s quirk, see top
+    intFloor = 1.0 / cars[0].velocityFps    # [P37] floorHeight/velocity
     average = np.zeros(chrom.shape[0])
 
     for n in range(chrom.shape[0]):

@@ -21,9 +21,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from decision.meta.obj_funs import objFunConventional1, numOfCarStops
 
 
-def car(floor, state, DF=(), velocity=1.0, stopOverTime=2.0):
+def car(floor, state, DF=(), velocity=1.0, velocityFps=1.0,
+        stopOverTime=2.0):
     return NS(floor=float(floor), state=state, DF=set(DF),
-              velocity=velocity, stopOverTime=stopOverTime)
+              velocity=velocity, velocityFps=velocityFps,
+              stopOverTime=stopOverTime)
+
+
+def test_interfloor_time_uses_velocityFps():
+    """[P37] intFloor = 1/velocityFps (= floorHeight/velocity):
+    0.5 floors/s -> 2 s per floor."""
+    avg = objFunConventional1([car(1, 1, velocityFps=0.5)], [3], 1,
+                              [[1]], nf=5)
+    assert np.allclose(avg, [4.0]), avg   # (3-1) floors * 2 s, 0 stops
+    print("PASS  [P37] inter-floor time = floorHeight/velocity")
 
 
 def test_numOfCarStops():
@@ -111,4 +122,5 @@ if __name__ == "__main__":
     test_reversal_DF_correction()
     test_idle_state_leak_across_rows()
     test_down_car_full_route()
+    test_interfloor_time_uses_velocityFps()
     print("\nALL objFunConventional1 TESTS PASSED")

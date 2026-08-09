@@ -54,10 +54,13 @@ Deviation notes (continuing the [P#] family):
        NotImplementedError for both - the [P13] wrapper only ever
        passes "WT".
 
+  [P37] intFloor = 1/velocityFps = floorHeight/velocity - the
+       dimensionally-correct inter-floor travel time (2 s at the GUI
+       defaults: 3 m floors / 1.5 m/s), matching objFunConventional1
+       [P37]. Deviation by decision (2026-08): objFunDestination.m
+       line 22 still reads 1/velocity (m/s).
+
 MATLAB quirks preserved (flagged !!!):
-  * !!! intFloor = 1/cars(1).velocity with velocity in m/s - same
-    quirk as the objFunConventional1 port; the dimensionally-correct
-    inter-floor time would be 1/velocityFps. Kept for identical costs.
   * !!! mean([WT1 WT2]) over zero waiting passengers is NaN, as in
     MATLAB (unreachable via dispatch(), which returns early when no
     hall calls exist).
@@ -139,7 +142,7 @@ def objFunDestination(cars: List[Any], HC: Sequence[int],
     HC_arr = np.asarray(HC, dtype=int)   # floor numbers, 1..nf
     P1_floor, P1_DF = _sortedWaiting(P.waiting[1])     # up-waiting
     P2_floor, P2_DF = _sortedWaiting(P.waiting[2])     # down-waiting
-    intFloor = 1.0 / cars[0].velocity          # !!! m/s quirk, see top
+    intFloor = 1.0 / cars[0].velocityFps    # [P37] floorHeight/velocity
     average = np.zeros(chrom.shape[0])
 
     for n in range(chrom.shape[0]):

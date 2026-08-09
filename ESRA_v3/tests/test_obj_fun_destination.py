@@ -21,9 +21,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from decision.meta.obj_funs import objFunDestination, numOfCarStopsTrue
 
 
-def car(floor, state, DF=(), velocity=1.0, stopOverTime=2.0):
+def car(floor, state, DF=(), velocity=1.0, velocityFps=1.0,
+        stopOverTime=2.0):
     return NS(floor=float(floor), state=state, DF=set(DF),
-              velocity=velocity, stopOverTime=stopOverTime)
+              velocity=velocity, velocityFps=velocityFps,
+              stopOverTime=stopOverTime)
+
+
+def test_interfloor_time_uses_velocityFps():
+    """[P37] intFloor = 1/velocityFps (= floorHeight/velocity):
+    0.5 floors/s -> 2 s per floor."""
+    avg = objFunDestination([car(1, 1, velocityFps=0.5)], [2], 1,
+                            [[1]], 8, plists(up=[(2, 5)]))
+    assert np.allclose(avg, [2.0]), avg   # (2-1) floor * 2 s, 0 stops
+    print("PASS  [P37] inter-floor time = floorHeight/velocity")
 
 
 def plists(up=(), down=()):
@@ -150,4 +161,5 @@ if __name__ == "__main__":
     test_two_passengers_one_call()
     test_multi_row_two_cars()
     test_jt_ctt_not_ported()
+    test_interfloor_time_uses_velocityFps()
     print("\nALL objFunDestination TESTS PASSED")

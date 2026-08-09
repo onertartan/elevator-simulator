@@ -182,7 +182,7 @@ class ElevatorSimulatorWindow(QMainWindow):
     def _sweep_command(start_data):
         """Command line for analysis/run_parallel_sweep.py assembled
         from the current GUI settings (objective, GA budget, initials
-        workbook)."""
+        workbook, and the Building & Car tab's car parameters)."""
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         objective = ("conventional"
                      if start_data["objectiveFunction"].startswith(
@@ -194,7 +194,16 @@ class ElevatorSimulatorWindow(QMainWindow):
                 "--objective", objective,
                 "--pop", str(start_data["nPop"]),
                 "--gens", str(start_data["G"]),
-                "--runs", str(start_data["numberOfRuns"])]
+                "--runs", str(start_data["numberOfRuns"]),
+                "--velocity", str(start_data["carVelocity"]),
+                "--floor-height", str(start_data["floorHeight"]),
+                "--door-open", str(start_data["doorOpeningTime"]),
+                "--door-close", str(start_data["doorClosingTime"]),
+                "--transfer-time",
+                str(start_data["passengerTransferTime"]),
+                "--capacity", str(start_data["carCapacity"]),
+                "--capacity-factor",
+                str(start_data["carCapacityFactor"])]
 
     def _launch_parameter_sweep(self, start_data):
         """[W1] Run the GA parameter search through

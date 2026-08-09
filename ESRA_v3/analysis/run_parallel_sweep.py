@@ -65,11 +65,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_XLSX = os.path.join(ROOT, "matlab_src", "initials_file.xlsx")
 DEFAULT_OUT = os.path.join(ROOT, "matlab_src", "results")
 
-# Building & Car tab values the snapshot cars are built with (the same
-# constants the runtime benchmark used).
+# Building & Car tab DEFAULTS for the snapshot cars; the GUI launcher
+# overrides them with the tab's live values via the CLI flags below.
 CAR_PARAMS = dict(doorOpeningTime=2.0, passengerTransferTime=3.0,
                   doorClosingTime=2.0, carCapacity=10,
-                  carCapacityFactor=0.8, carVelocity=1.0, floorHeight=3.0)
+                  carCapacityFactor=1.0, carVelocity=1.5,
+                  floorHeight=3.0)
 
 SMOKE_GRID = {                       # tiny grid for --smoke self-test
     "crossoverValues": [0.5, 0.8],
@@ -96,7 +97,8 @@ def _lowerPriority() -> None:
 
 
 def _initWorker(xlsxPath: str, objectiveName: str,
-                popSize: int, generations: int) -> None:
+                popSize: int, generations: int,
+                carParams: dict) -> None:
     """Runs once per worker process: set priority, load the snapshot."""
     global _W
     _lowerPriority()
@@ -104,7 +106,7 @@ def _initWorker(xlsxPath: str, objectiveName: str,
     from decision.meta.obj_funs import (objFunConventional1,
                                         objFunDestination)
 
-    dc = DataConf(NS(dataType=3, fileName=xlsxPath, **CAR_PARAMS))
+    dc = DataConf(NS(dataType=3, fileName=xlsxPath, **carParams))
     HC_1 = [hc.floor for hc in dc.initialHC.waiting[1]]
     HC_2 = [hc.floor for hc in dc.initialHC.waiting[2]]
     _W = NS(cars=dc.initialCars, P=dc.initialP,
@@ -192,6 +194,22 @@ def main():
                     default="crn")
     ap.add_argument("--initials", default=DEFAULT_XLSX)
     ap.add_argument("--out", default=DEFAULT_OUT)
+    # Building & Car tab values (the GUI launcher passes these through)
+    ap.add_argument("--velocity", type=float,
+                    default=CAR_PARAMS["carVelocity"],
+                    help="car velocity in m/s")
+    ap.add_argument("--floor-height", type=float,
+                    default=CAR_PARAMS["floorHeight"])
+    ap.add_argument("--door-open", type=float,
+                    default=CAR_PARAMS["doorOpeningTime"])
+    ap.add_argument("--door-close", type=float,
+                    default=CAR_PARAMS["doorClosingTime"])
+    ap.add_argument("--transfer-time", type=float,
+                    default=CAR_PARAMS["passengerTransferTime"])
+    ap.add_argument("--capacity", type=int,
+                    default=CAR_PARAMS["carCapacity"])
+    ap.add_argument("--capacity-factor", type=float,
+                    default=CAR_PARAMS["carCapacityFactor"])
     ap.add_argument("--smoke", action="store_true",
                     help="tiny grid/budget self-test (seconds, not hours)")
     args = ap.parse_args()
@@ -213,16 +231,28 @@ def main():
     if args.smoke:
         stamp += "_smoke"
 
+    carParams = dict(doorOpeningTime=args.door_open,
+                     passengerTransferTime=args.transfer_time,
+                     doorClosingTime=args.door_close,
+                     carCapacity=args.capacity,
+                     carCapacityFactor=args.capacity_factor,
+                     carVelocity=args.velocity,
+                     floorHeight=args.floor_height)
+
     print(f"parallel GA sweep: {int(np.prod(shape[:5]))} configurations "
           f"x {args.runs} runs = {total} tasks")
     print(f"  objective={args.objective}  pop={args.pop} "
           f"gens={args.gens}  seed-mode={args.seed_mode}")
+    print(f"  cars: v={args.velocity:g} m/s, floors {args.floor_height:g} m"
+          f" (inter-floor {args.floor_height / args.velocity:.2f} s),"
+          f" doors {args.door_open:g}+{args.transfer_time:g}"
+          f"+{args.door_close:g} s")
     print(f"  workers={args.workers} (below-normal priority)  "
           f"snapshot={os.path.basename(args.initials)}")
 
     fitnesses = np.full(shape, np.nan)
     meta = {"timestamp": stamp, "objective": args.objective,
-            "snapshot": args.initials, "carParams": CAR_PARAMS,
+            "snapshot": args.initials, "carParams": carParams,
             "populationSize": args.pop, "generations": args.gens,
             "runs": args.runs, "seedMode": args.seed_mode,
             "baseSeed": args.seed, "workers": args.workers,
@@ -235,7 +265,7 @@ def main():
     ctx = mp.get_context("spawn")
     pool = ctx.Pool(processes=args.workers, initializer=_initWorker,
                     initargs=(args.initials, args.objective,
-                              args.pop, args.gens))
+                              args.pop, args.gens, carParams))
     try:
         every = max(1, total // 200)
         for idx, runIdx, cost in pool.imap_unordered(_runTask, tasks,

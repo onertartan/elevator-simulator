@@ -38,8 +38,8 @@ def main():
     # ---- the realistic dispatch snapshot ------------------------------
     sd = NS(dataType=3, fileName=XLSX,
             doorOpeningTime=2.0, passengerTransferTime=3.0,
-            doorClosingTime=2.0, carCapacity=10, carCapacityFactor=0.8,
-            carVelocity=1.0, floorHeight=3.0)
+            doorClosingTime=2.0, carCapacity=10, carCapacityFactor=1.0,
+            carVelocity=1.5, floorHeight=3.0)
     dc = DataConf(sd)
     cars = dc.initialCars
     HC, P = dc.initialHC, dc.initialP

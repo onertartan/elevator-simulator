@@ -198,7 +198,8 @@ def test_ga_dispatch_with_conventional_objective():
 
     def car(cid, floor, state):
         return NS(id=cid, floor=float(floor), state=state, DF=set(),
-                  velocity=1.0, stopOverTime=2.0, stopOverCounter=0.0)
+                  velocity=1.0, velocityFps=1.0, stopOverTime=2.0,
+                  stopOverCounter=0.0)
 
     cars = [car(1, 1, 0), car(2, 5, 0), car(3, 10, 0)]
     disp = GA(make_start_data(objFun=objFunConventional1,

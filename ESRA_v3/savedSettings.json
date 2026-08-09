@@ -49,7 +49,7 @@
   },
   "control": {
     "method": "meta",
-    "objective_function": "Conventional Information",
+    "objective_function": "Destination Information",
     "algorithm": "GA",
     "population_size": 100,
     "max_iterations": 50,
@@ -79,10 +79,10 @@
   },
   "simulation": {
     "data_type": 3,
-    "file_name": "E:/oner/elevator-simulator/ESRA_v3/initials_file_orj.xlsx",
+    "file_name": "E:/oner/elevator-simulator/ESRA_v3/initials_file.xlsx",
     "num_initial_passengers": 0,
-    "parameter_search": false,
-    "number_of_runs": 1,
+    "parameter_search": true,
+    "number_of_runs": 100,
     "simulation_duration": 15,
     "num_simulations": 1,
     "reference_time": 0,
@@ -90,8 +90,8 @@
     "dispatch_period": 1
   },
   "display": {
-    "display_traffic_flow": true,
-    "display_tabular_data": true,
-    "speed": 1
+    "display_traffic_flow": false,
+    "display_tabular_data": false,
+    "speed": 5
   }
 }
