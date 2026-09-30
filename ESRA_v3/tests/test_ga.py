@@ -199,7 +199,7 @@ def test_ga_dispatch_with_conventional_objective():
     def car(cid, floor, state):
         return NS(id=cid, floor=float(floor), state=state, DF=set(),
                   velocity=1.0, velocityFps=1.0, stopOverTime=2.0,
-                  stopOverCounter=0.0)
+                  stopOverCounter=0.0, doorOpeningTime=1.0)
 
     cars = [car(1, 1, 0), car(2, 5, 0), car(3, 10, 0)]
     disp = GA(make_start_data(objFun=objFunConventional1,
@@ -213,7 +213,7 @@ def test_ga_dispatch_with_conventional_objective():
     by_floor = {p.floor: p for p in P.waiting[1] + P.waiting[2]}
     assert by_floor[2].carId == assigned[2]
     assert by_floor[7].carId == assigned[7]
-    # the live fleet is untouched by the objective's state writes [P14]
+    # Objective evaluation must leave the live fleet's initial states intact.
     assert [c.state for c in cars] == [0, 0, 0]
     print("PASS  GA + objFunConventional1 end-to-end dispatch")
 

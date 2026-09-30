@@ -1,0 +1,30 @@
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\caption{The recommendation is the block in the upper part of the
+table: tournament selection, scattered crossover and frequency
+mutation with $P_c\in[0.3,0.5]$ and $P_m\in[0.1,0.2]$, i.e.\ 6 cells and
+600 runs. The single point is listed only for readers who need one
+setting to copy; it is not a separate finding. $\Delta$ is the change
+in mean AWT relative to the best observed configuration, and every row
+is a point of the same factorial design --- the study defines no
+external baseline and no default GA setting.}
+\label{tab:recommended}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+ & Mean & SD & Succ. & $\Delta$\\
+ & (s) & (s) & (\%) & (\%)\\
+\midrule
+\multicolumn{5}{@{}l}{\itshape Recommended block}\\
+\quad pooled & 18.198 & 0.921 & 8.8 & +0.3\\
+\quad best cell & 18.145 & 0.813 & 6.0 & +0.0\\
+\quad worst cell & 18.241 & 0.951 & 8.0 & +0.5\\
+\addlinespace
+\multicolumn{5}{@{}l}{\itshape Single point, and the grid extremes}\\
+\quad $P_c=0.4$, $P_m=0.2$ (rk.\ 12) & 18.241 & 0.951 & 8.0 & +0.5\\
+\quad best observed (rk.\ 1) & 18.145 & 0.813 & 6.0 & +0.0\\
+\quad worst observed (rk.\ 1575) & 30.975 & 4.069 & 0.0 & +70.7\\
+\bottomrule
+\end{tabular}
+\end{table}

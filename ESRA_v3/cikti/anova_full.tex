@@ -1,0 +1,34 @@
+\begin{table}[t]
+\centering
+\small
+\caption{Variance decomposition of AWT over the $N=157\,500$ runs (five main effects and all ten two-way interactions). The design is
+balanced, so the shares are exact and independent of the other terms.
+\%SS is the share of the total sum of squares; $\rho=\sqrt{SS/N}$ is the
+root-mean-square effect in seconds, given as a percentage of the grand
+mean. The two answer different questions: a term's \%SS falls whenever
+another term grows, while $\rho$ does not.}
+\label{tab:anova}
+\begin{tabular}{lrrrrr}
+\toprule
+Source & df & \%SS & $\rho$ (\%) & $\eta_p^2$ & $p$\\
+\midrule
+Mutation & 4 & 32.75 & 9.66 & 0.439 & $<$0.001\\
+$P_m$ & 4 & 11.26 & 5.67 & 0.212 & $<$0.001\\
+Crossover & 2 & 5.74 & 4.04 & 0.121 & $<$0.001\\
+$P_m$ $\times$ Mutation & 16 & 2.67 & 2.76 & 0.060 & $<$0.001\\
+Crossover $\times$ Mutation & 8 & 1.84 & 2.29 & 0.042 & $<$0.001\\
+$P_c$ $\times$ Mutation & 24 & 1.50 & 2.07 & 0.035 & $<$0.001\\
+$P_c$ $\times$ $P_m$ & 24 & 0.67 & 1.38 & 0.016 & $<$0.001\\
+$P_c$ & 6 & 0.47 & 1.16 & 0.011 & $<$0.001\\
+$P_m$ $\times$ Crossover & 8 & 0.40 & 1.07 & 0.010 & $<$0.001\\
+$P_c$ $\times$ Crossover & 12 & 0.33 & 0.97 & 0.008 & $<$0.001\\
+Selection & 2 & 0.24 & 0.83 & 0.006 & $<$0.001\\
+$P_m$ $\times$ Selection & 8 & 0.13 & 0.60 & 0.003 & $<$0.001\\
+Selection $\times$ Mutation & 8 & 0.10 & 0.54 & 0.002 & $<$0.001\\
+$P_c$ $\times$ Selection & 12 & 0.07 & 0.45 & 0.002 & $<$0.001\\
+Selection $\times$ Crossover & 4 & 0.00 & 0.06 & 0.000 & 0.256\\
+\midrule
+Residual & 157357 & 41.82 & 10.92 & -- & --\\
+\bottomrule
+\end{tabular}
+\end{table}

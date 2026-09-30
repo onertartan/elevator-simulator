@@ -10,13 +10,14 @@ MetaheuristicDispatcher.dispatch), it walks each car's collective
 service route in three direction segments and estimates the waiting
 time of every hall call as
 
-    travel_time_to_call + (stops_before_call) * stopOverTime
+    travel_time_to_call + stops_before_call * stopOverTime
 
 returning the population's per-row mean waiting time (lower = better).
 Plugs into startData.objFun with the [P13] wrapper signature:
 objFun(cars_copy, HC_all, HC_numofups, population, nf, P, "WT").
-The wrapper passes fresh DEEP COPIES of the cars on every call [P14],
-so the in-place car.state writes below never touch the live fleet.
+The wrapper still passes fresh DEEP COPIES of the cars on every call [P14].
+This objective itself is read-only: each chromosome starts from the supplied
+fleet states and keeps its idle-direction decisions local to that row [P40].
 
 Deviation notes (continuing the [P#] family):
 
@@ -48,15 +49,20 @@ Deviation notes (continuing the [P#] family):
        (2026-08): ESRA_v2 used 1/velocity (m/s); the corrected
        objFunConventional1.m already reads velocityFps, and BOTH
        Python objectives now follow it.
+  [P39] WT ends when pickup doors START opening, not at boarding. No pickup
+       opening duration is added. Prior stops retain full stopOverTime,
+       including their opening/transfer/closing. The mean remains per hall
+       call, not passenger-count weighted. Supersedes the full-open variant.
 
-MATLAB quirks preserved (flagged !!!):
-  * !!! The idle-car direction decision WRITES car.state, and MATLAB
-    cars are handle objects - so the decision made while scoring
-    chromosome row n LEAKS into rows n+1.. of the same call. The port
-    mutates the per-call deep copies the same way.
-  * The containers.Map memoization is commented out in the .m source
-    and stays out here - it would also be unsound under the state-leak
-    quirk above (identical rows can score differently).
+  [P40] Idle direction is a local variable reset from car.state for EACH
+       chromosome/car pair. The direction-selection rule and upward tie-break
+       are unchanged, but the MATLAB-style state leak between rows is removed.
+       Singleton, batched and reordered evaluation give the same candidate
+       costs without mutating the fleet. Historical multi-row scores affected
+       by the leak may change.
+
+The containers.Map memoization is commented out in the .m source and remains
+unimplemented here.
 """
 from __future__ import annotations
 
@@ -91,26 +97,31 @@ def objFunConventional1(cars: List[Any], HC: Sequence[int],
     """
     objFunConventional1(cars, HC, HC_numofups, chrom, nf, ~, ~)
 
-    cars:         per-call deep copies of the fleet ([P14]; mutated - see
-                  the !!! state-leak quirk in the module docstring)
+    cars:         fleet snapshot, read-only; the dispatcher supplies deep
+                  copies ([P14]), but this objective never mutates them
     HC:           all waiting hall-call floors, up calls then down calls
     HC_numofups:  how many leading entries of HC are up calls
     chrom:        (nPop, len(HC)) car labels 1..len(cars)
     nf:           number of floors
     P, costType:  ignored (MATLAB `~, ~`)
 
-    Returns the per-row mean estimated waiting time of hall calls (mean system response time), shape (nPop,).
+    Returns per-row call-weighted estimated wait until pickup doors start opening,
+    shape (nPop,). Passenger counts remain unused.
     """
     chrom = np.asarray(chrom)
     HC_arr = np.asarray(HC, dtype=int)   # floor numbers, 1..nf
     numHC = len(HC_arr)
     intFloor = 1.0 / cars[0].velocityFps    # [P37] floorHeight/velocity
+    door_times = [float(car.doorOpeningTime) for car in cars]
+    if any(not np.isfinite(t) or t < 0 for t in door_times):
+        raise ValueError("doorOpeningTime must be finite and nonnegative")
     average = np.zeros(chrom.shape[0])
 
     for n in range(chrom.shape[0]):
         WT = np.zeros(numHC)
 
         for label, car in enumerate(cars, start=1):
+            state = car.state                 # [P40] original state for this row
             floor = car.floor
             DF = sorted(car.DF)                # [P19]
             stopOver = car.stopOverTime
@@ -134,21 +145,21 @@ def objFunConventional1(cars: List[Any], HC: Sequence[int],
             MAKS = nf
             prev = 0                    # stops accumulated so far
 
-            # ---- idle car: pick a direction (!!! leaks across rows) --
-            if car.state == 0:
+            # ---- idle car: pick a direction for this row only [P40] --
+            if state == 0:
                 above = np.concatenate([HC_up_1, HC_dw_2])
                 below = np.concatenate([HC_up_2, HC_dw_1])
                 if above.size and not below.size:
-                    car.state = 1
+                    state = 1
                 elif not above.size and below.size:
-                    car.state = -1
+                    state = -1
                 elif above.size and below.size:
                     u = min(above.min(), 2 * nf)
                     d = max(below.max(), -nf)
-                    car.state = -1 if abs(u - floor) > abs(d - floor) else 1
+                    state = -1 if abs(u - floor) > abs(d - floor) else 1
 
             # ================= CAR MOVING UP ==========================
-            if car.state == 1:
+            if state == 1:
                 # 1) up calls at/above the car
                 if HC_up_1.size:
                     stopsAt, prev = numOfCarStops(HC_up_1, Z, False, prev)
@@ -183,7 +194,7 @@ def objFunConventional1(cars: List[Any], HC: Sequence[int],
                                    + (stopsAt - 1) * stopOver)
 
             # ============ CAR MOVING DOWN (or still idle) =============
-            if car.state != 1:
+            if state != 1:
                 # 1) down calls at/below the car
                 if HC_dw_1.size:
                     stopsAt, prev = numOfCarStops(HC_dw_1, Z, True, prev)

@@ -55,10 +55,9 @@ Deviations from MATLAB ([S1]-[S7] inline):
   [S10] Phased boarding (car.py [A4]): drawCars adds per-car
        'pendingBoard' (standing at the hall lane while doors open),
        'boarding' (walking lane -> cabin) and 'boardProgress'.
-       Metrics with BOTH phases: board() and alight() are each recorded
-       at arrival + doorOpeningTime, so Pawt grows by doorOpeningTime,
-       HCawt is unchanged (calls answered at arrival), and TrT returns
-       to its pre-phased values (both endpoints shift equally).
+       board() and alight() remain at fully-open doors. Primary WT ends
+       at the accepting pickup service's opening START; WT_board retains
+       the queue-to-board duration. HC timing and TrT are unchanged.
 
 Formatting note: MATLAB used sprintf('%d', ...) on sums that are doubles
 (exact integers for Ts = 1); _fmtInt reproduces the integer look and
@@ -200,7 +199,9 @@ class Simulator:
                            if p.QJT == self.time]          # [S7]
                 for passenger in reversed(matches):
                     # copy so the WT recorded in RECold isn't mutated
-                    P.transfer(copy.copy(passenger), "waiting")
+                    replayed = copy.copy(passenger)
+                    replayed.reset_service_timing()
+                    P.transfer(replayed, "waiting")
                     if not any(hc.floor == passenger.floor
                                for hc in HC.waiting[dir_]):
                         HC.add(HallCall(passenger.floor, self.time, dir_))
@@ -369,7 +370,7 @@ class Simulator:
     def fillPassengerTables(self, P: Any) -> Dict[int, Dict[str, Any]]:
         tables: Dict[int, Dict[str, Any]] = {}
         rows = ["Call Floor", "Destination Floor", "Queue join time",
-                "Waiting time", "Car id"]
+                "Waiting time (opening start)", "Car id", "Wait to boarding"]
         for dir_ in (1, 2):
             waiting = P.waiting[dir_]
             if waiting:
@@ -382,6 +383,7 @@ class Simulator:
                         [_fmtInt(p.QJT) for p in waiting],
                         [_fmtInt(p.WT) for p in waiting],
                         [str(p.carId) for p in waiting],
+                        [_fmtInt(p.WT_board) for p in waiting],
                     ],
                 }
             else:
@@ -410,6 +412,8 @@ class Simulator:
     def fillResultsTable(self, HC: Any, P: Any,
                          cars: List[Any]) -> List[str]:
         tripTimes = [car.tripTime for car in cars]
+        p_board = [p.WT_board for p in list(P.served[1]) + list(P.served[2])
+                   if self.dataType != 3 or p.QJT != -1]
         if self.dataType == 3:
             p_wt = [p.WT for p in list(P.served[1]) + list(P.served[2])
                     if p.QJT != -1]
@@ -424,6 +428,8 @@ class Simulator:
                 _fmtMean(tripTimes),              # Avg car trip time
                 _fmtMean(p_wt),                   # Avg passenger waiting
                 _fmtMean(hc_wt),                  # Avg hall call waiting
+                _fmtInt(sum(p_board)),            # Secondary: wait to boarding
+                _fmtMean(p_board),
             ]
         p_wt = [p.WT for p in list(P.served[1]) + list(P.served[2])]
         hc_wt = [h.WT for h in list(HC.served[1]) + list(HC.served[2])]
@@ -436,6 +442,8 @@ class Simulator:
             _fmtMean(tripTimes),
             _fmtMean(p_wt),
             _fmtMean(hc_wt),
+            _fmtInt(sum(p_board)),
+            _fmtMean(p_board),
         ]
 
     # ---- delivery -----------------------------------------------------

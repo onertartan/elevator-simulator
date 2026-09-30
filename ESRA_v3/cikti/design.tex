@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\small
+\caption{Factorial design of the parameter search: 1575 configurations, each
+replicated over 100 independent runs under common random numbers
+(157\,500 GA runs in total).}
+\label{tab:design}
+\begin{tabular}{@{}lc@{\hspace{5pt}}l@{}}
+\toprule
+Setting & \# & Levels\\
+\midrule
+Crossover rate $P_c$ & 7 & 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9\\
+Mutation rate $P_m$ & 5 & 0.01, 0.02, 0.05, 0.1, 0.2\\
+Selection method & 3 & stoch.\ uniform, roulette, tournament\\
+Crossover method & 3 & scattered, single point, two point\\
+Mutation method & 5 & uniform, block, scramble, swap, frequency\\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,20 @@
+descriptor,"S1 (original, used by the sweep)",S2 (seed 20260809),S3 (seed 20260810)
+floors,40,40,40
+cars,8,8,8
+passengers,17,17,17
+up,8,8,8
+down,9,9,9
+hall calls (nVar),16,16,16
+up hall calls,7,7,7
+down hall calls,9,9,9
+in-car destinations,9,9,9
+cars going up,4,4,4
+mean travel distance,7.352941176470588,7.0,7.294117647058823
+median travel distance,6.0,5.0,5.0
+max travel distance,18,18,18
+total travel distance,125,119,124
+passenger floor span,4-35,1-40,1-33
+car floor span,1-40,11-40,2-27
+mean car-to-nearest-call gap,2.0,0.875,1.375
+incoming (from fl. 1),0,1,1
+outgoing (to fl. 1),2,0,1

@@ -1,8 +1,14 @@
 # ESRA — MATLAB → Python Elevator Simulator Port: PROJECT STATUS
 
-Source of truth for the port's current state, file ownership, deviation
-notes, and reference physics. Read this first in every session (chat or
-Claude Code). Update it whenever behavior or anchors change.
+Historical port notes: the sections below describe the July 2026 baseline,
+not current feature coverage. See RUNNING.md for current usage and semantics.
+
+Waiting-time update (2026-09-29): RUNNING.md section 7 supersedes the WT
+definitions, reference WT values and smoke-test advice below. Primary WT now
+ends at the accepting car's pickup opening START; WT_board retains the former
+queue-to-boarding measure. For the reference trip: WT/Pawt=2, WT_board=4,
+BT=4, DAT=15, TrT=11. The updated smoke suite passes. Animation and physical
+timing have not changed; do not restore the historical WT=4 assertions.
 
 Last updated: 2026-07-18 — after phased boarding [A4]/[S10]/[N4].
 

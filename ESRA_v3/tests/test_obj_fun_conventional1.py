@@ -6,10 +6,11 @@ Hand-computed verification of decision/meta/obj_funs/obj_fun_conventional1
 
 Run from the ESRA_v3/ root:  python tests/test_obj_fun_conventional1.py
 
-Cars are SimpleNamespace stand-ins: the objective only reads/writes
-velocity, floor, DF, state and stopOverTime, and the real dispatcher
-passes deep copies anyway [P14].
+Cars are SimpleNamespace stand-ins: the objective reads but never mutates
+velocity, floor, DF, state, stopOverTime and doorOpeningTime. The dispatcher
+still passes deep copies [P14].
 """
+import copy
 import os
 import sys
 from types import SimpleNamespace as NS
@@ -22,10 +23,10 @@ from decision.meta.obj_funs import objFunConventional1, numOfCarStops
 
 
 def car(floor, state, DF=(), velocity=1.0, velocityFps=1.0,
-        stopOverTime=2.0):
+        stopOverTime=2.0, doorOpeningTime=0.0):
     return NS(floor=float(floor), state=state, DF=set(DF),
               velocity=velocity, velocityFps=velocityFps,
-              stopOverTime=stopOverTime)
+              stopOverTime=stopOverTime, doorOpeningTime=doorOpeningTime)
 
 
 def test_interfloor_time_uses_velocityFps():
@@ -80,25 +81,78 @@ def test_reversal_DF_correction():
     print("PASS  shared reversal/DF stop not double-counted")
 
 
-def test_idle_state_leak_across_rows():
-    """!!! MATLAB handle quirk: the idle-direction decision made while
-    scoring row 1 persists into row 2 of the SAME call."""
+def test_idle_direction_is_local_to_each_row():
+    """Each candidate starts from the original idle state, not the prior row."""
     cars = [car(3, 0, DF={1}), car(1, 1)]
     HC, ups = [4, 2], 1
     chrom = [[2, 1],   # row 1: car1 takes down@2 -> decides state=-1
-             [1, 2]]   # row 2: car1 takes up@4 with LEAKED state=-1
+             [1, 2]]   # row 2: car1 takes up@4 -> independently decides state=1
     # row 1: car2 up@4 from floor 1 -> 3; car1 down@2 from 3 -> 1; mean 2
-    # row 2: car1 (state -1, MIN=min(DF+floor)=1):
-    #        ((3-1)+(4-1)) + (3-1)*2 = 9;  car2 down@2 -> 1;  mean 5
+    # row 2: car1 idle->up: (4-3)+1*2=3; car2 down@2 -> 1; mean 2.
+    # The old state leak incorrectly gave mean 5 for row 2.
     avg = objFunConventional1(cars, HC, ups, chrom, nf=5)
-    assert np.allclose(avg, [2.0, 5.0]), avg
+    np.testing.assert_array_equal(avg, [2.0, 2.0])
 
-    # fresh copies (as the [P14] wrapper provides per call) -> row 2
-    # scored alone gives the un-leaked cost
-    cars = [car(3, 0, DF={1}), car(1, 1)]
+    # Reuse the same input objects: singleton and repeated calls must agree.
     avg = objFunConventional1(cars, HC, ups, [[1, 2]], nf=5)
-    assert np.allclose(avg, [2.0]), avg   # car1 idle->up: (4-3)+1*2=3; mean 2
-    print("PASS  !!! idle-state decision leaks across chromosome rows")
+    np.testing.assert_array_equal(avg, [2.0])
+    print("PASS  idle direction is local: B costs 2 both alone and after A")
+
+
+def test_population_order_and_batching_do_not_change_costs():
+    cars = [car(3, 0, DF={1}), car(5, 0, DF={8}), car(1, 1), car(8, -1)]
+    calls = [2, 4, 6, 2, 5, 7]
+    rows = np.array([[1, 2, 3, 1, 2, 4],
+                     [3, 1, 1, 4, 2, 2],
+                     [2, 2, 1, 1, 4, 3],
+                     [1, 1, 1, 1, 1, 1],
+                     [2, 2, 2, 2, 2, 2],
+                     [1, 2, 3, 1, 2, 4]])  # repeated candidate
+    # Independent singleton evaluations start from fresh initial fleet copies.
+    expected = np.concatenate([
+        objFunConventional1(copy.deepcopy(cars), calls, 3, [row], 8)
+        for row in rows])
+    np.testing.assert_array_equal(
+        objFunConventional1(cars, calls, 3, rows, 8), expected)
+    order = [3, 0, 5, 1, 4, 2]
+    np.testing.assert_array_equal(
+        objFunConventional1(cars, calls, 3, rows[order], 8), expected[order])
+    split = np.concatenate([
+        objFunConventional1(cars, calls, 3, batch, 8)
+        for batch in (rows[:2], rows[2:5], rows[5:])])
+    np.testing.assert_array_equal(split, expected)
+    np.testing.assert_array_equal(
+        objFunConventional1(cars, calls, 3, rows, 8), expected)
+    assert expected[0] == expected[-1]
+    print("PASS  singleton, batch, permutation, duplicates and repeated calls agree")
+
+
+def test_objective_does_not_mutate_inputs():
+    cars = [car(3, 0, DF={1}), car(5, 0, DF={8}), car(1, 1), car(8, -1)]
+    calls = np.array([2, 4, 6, 2, 5, 7])
+    rows = np.array([[1, 2, 3, 1, 2, 4], [3, 1, 1, 4, 2, 2]])
+    original_cars, original_calls, original_rows = copy.deepcopy((cars, calls, rows))
+    objFunConventional1(cars, calls, 3, rows, 8)
+    assert [vars(c) for c in cars] == [vars(c) for c in original_cars]
+    np.testing.assert_array_equal(calls, original_calls)
+    np.testing.assert_array_equal(rows, original_rows)
+    print("PASS  fleet fields, destinations, calls and chromosomes stay unchanged")
+
+
+def test_idle_direction_policy_is_preserved():
+    # Car at floor 4: above only, below only, nearer above/below, tie,
+    # then same-floor up/down/both. Equidistant calls still prefer up.
+    for calls, ups, direction in (
+            ([6], 1, 1), ([2], 0, -1),
+            ([5, 2], 1, 1), ([7, 3], 1, -1), ([6, 2], 1, 1),
+            ([4], 1, 1), ([4], 0, -1), ([4, 4], 1, 1)):
+        idle = car(4, 0)
+        row = [[1] * len(calls)]
+        expected = objFunConventional1([car(4, direction)], calls, ups, row, 8)
+        actual = objFunConventional1([idle], calls, ups, row, 8)
+        np.testing.assert_array_equal(actual, expected)
+        assert idle.state == 0
+    print("PASS  idle direction rule and upward tie-break preserved without mutation")
 
 
 def test_down_car_full_route():
@@ -115,12 +169,62 @@ def test_down_car_full_route():
     print("PASS  down car three-segment route")
 
 
+def test_pickup_door_opening_same_floor():
+    for state, ups in ((0, 1), (1, 0), (-1, 1), (0, 0)):
+        avg = objFunConventional1(
+            [car(3, state, velocityFps=0.5, stopOverTime=7, doorOpeningTime=2)],
+            [3], ups, [[1]], 8)
+        np.testing.assert_array_equal(avg, [0.0])
+    print("PASS  same-floor pickup: zero wait to opening start, including nonzero doors")
+
+
+def test_pickup_opening_does_not_repeat_prior_stop_over():
+    # WT at 3: 4; WT at 4: 6+7=13; the prior full stop remains.
+    avg = objFunConventional1(
+        [car(1, 1, velocityFps=0.5, stopOverTime=7, doorOpeningTime=2)],
+        [3, 4], 2, [[1, 1]], 8)
+    np.testing.assert_array_equal(avg, [8.5])
+    print("PASS  prior full stop retained, no pickup opening added")
+
+
+def test_car_specific_opening_all_route_segments():
+    rows = np.array([[1] * 6, [2] * 6, [1, 2, 2, 1, 1, 2]])
+    calls = [2, 4, 6, 2, 4, 6]
+    cars = [car(4, 1, DF={2, 6}, stopOverTime=7),
+            car(4, -1, DF={2, 6}, stopOverTime=7)]
+    baseline = objFunConventional1(cars, calls, 3, rows, 8)
+    doors = np.array([1.0, 3.0])
+    for c, opening in zip(cars, doors):
+        c.doorOpeningTime = opening
+    actual = objFunConventional1(cars, calls, 3, rows, 8)
+    np.testing.assert_allclose(actual, baseline)
+    print("PASS  car-specific pickup opening excluded across all route segments")
+
+
+def test_invalid_door_opening_is_rejected():
+    for opening in (-1, float("nan"), float("inf")):
+        try:
+            objFunConventional1([car(3, 0, doorOpeningTime=opening)], [3], 1, [[1]], 8)
+        except ValueError as exc:
+            assert "doorOpeningTime" in str(exc)
+        else:
+            raise AssertionError("Invalid door-opening time was accepted")
+    print("PASS  invalid pickup door-opening time rejected")
+
+
 if __name__ == "__main__":
     test_numOfCarStops()
     test_up_calls_above()
     test_mixed_up_and_down()
     test_reversal_DF_correction()
-    test_idle_state_leak_across_rows()
+    test_idle_direction_is_local_to_each_row()
+    test_population_order_and_batching_do_not_change_costs()
+    test_objective_does_not_mutate_inputs()
+    test_idle_direction_policy_is_preserved()
     test_down_car_full_route()
     test_interfloor_time_uses_velocityFps()
+    test_pickup_door_opening_same_floor()
+    test_pickup_opening_does_not_repeat_prior_stop_over()
+    test_car_specific_opening_all_route_segments()
+    test_invalid_door_opening_is_rejected()
     print("\nALL objFunConventional1 TESTS PASSED")

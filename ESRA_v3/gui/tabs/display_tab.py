@@ -14,7 +14,7 @@ Tab 5: 'Display Tab'. Ported from the MATLAB source:
       - carTable          (4 unnamed columns)
       - passengerUpTable  ('Waiting up passengers')
       - passengerDownTable('Waiting down passengers')
-      - resultsTable      (8 named result rows)
+      - resultsTable      (10 named result rows)
       - countersTable     (6 named counter rows, see [L2])
 
 Layout fixes 2026-07-17 ([L1]-[L3]):
@@ -39,10 +39,11 @@ from PySide6.QtWidgets import (
 from ..flow_view import TrafficFlowView
 
 RESULT_ROWS = [
-    "Total car trip time", "Total passenger waiting time",
+    "Total car trip time", "Total passenger WT (opening start)",
     "Total hall call waiting time", "Number of served passengers",
     "Number of responded hall calls", "Average car trip time",
-    "Average passenger waiting time", "Average hall call waiting time",
+    "Average passenger WT (opening start)", "Average hall call waiting time",
+    "Total passenger wait to boarding", "Average passenger wait to boarding",
 ]
 COUNTER_ROWS = [                                    # [L2] rows, not columns
     "Building Conf.", "Car Conf.", "Traffic Conf.",

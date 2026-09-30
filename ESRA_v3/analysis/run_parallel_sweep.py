@@ -3,8 +3,8 @@ analysis/run_parallel_sweep.py
 ===============================
 Parallel GA parameter-search runner for the shared workstation.
 
-Runs the exact GA.m sweep grid (GA.PARAM_SEARCH_GRID: 6 Pc x 5 Pm x
-3 selection x 3 crossover x 5 mutation) x --runs repetitions as
+Runs a JSON experiment's grid, or GA.PARAM_SEARCH_GRID for legacy CLI
+invocations (7 Pc x 5 Pm x 3 selection x 3 crossover x 5 mutation), as
 independent (configuration, run) tasks across a process pool, on the
 custom-initials dispatch snapshot (dataType 3 workbook).
 
@@ -22,17 +22,19 @@ Reproducibility / seeding (--seed-mode):
   independent    every task gets its own seed (base + task index),
                  like the original MATLAB sweep.
 
-Output (same names/format as the [P36] auto-save, so
-analyze_ga_parameter_search.py and export_mat_to_csv.py work on it
-unchanged):
+Output (same tensor axis order as [P36]; arbitrary factor levels are
+recorded in metadata and explicitly labelled in the CSV summary):
   matlab_src/results/ga_param_search_parallel_<stamp>.npz  (+ .mat)
-      fitnesses       (6,5,3,3,5,runs)  best cost per run [s]
-      mean_fitnesses  (6,5,3,3,5)       mean over runs
+      fitnesses       (Pc,Pm,selection,crossover,mutation,runs)
+      mean_fitnesses  (Pc,Pm,selection,crossover,mutation)
   ..._meta.json       objective, budget, seeds, workers, elapsed, host
+  ..._summary.csv     one row per configuration, completed-run statistics
+  ..._experiment.json / ..._initials.xlsx  reproducible inputs
 Ctrl+C saves whatever finished so far (unfinished cells = NaN,
 filename suffixed _partial).
 
 Usage (from the ESRA_v3/ root):
+    .venv/Scripts/python analysis/run_parallel_sweep.py --config experiment.json
     .venv/Scripts/python analysis/run_parallel_sweep.py
         [--objective destination|conventional] [--runs 10]
         [--pop 100] [--gens 50] [--workers N] [--seed 0]
@@ -48,11 +50,14 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 import argparse
 import copy
+import csv
 import ctypes
 import datetime
 import json
+import hashlib
 import multiprocessing as mp
 import platform
+import shutil
 import sys
 import time
 from types import SimpleNamespace as NS
@@ -60,17 +65,12 @@ from types import SimpleNamespace as NS
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
+from ga_sweep_config import (CAR_PARAMS, DEFAULT_OUT, GRID_KEYS, configuration_count,
+                             default_grid, default_workers, load_experiment,
+                             validate_experiment)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_XLSX = os.path.join(ROOT, "matlab_src", "initials_file.xlsx")
-DEFAULT_OUT = os.path.join(ROOT, "matlab_src", "results")
-
-# Building & Car tab DEFAULTS for the snapshot cars; the GUI launcher
-# overrides them with the tab's live values via the CLI flags below.
-CAR_PARAMS = dict(doorOpeningTime=2.0, passengerTransferTime=3.0,
-                  doorClosingTime=2.0, carCapacity=10,
-                  carCapacityFactor=1.0, carVelocity=1.5,
-                  floorHeight=3.0)
 
 SMOKE_GRID = {                       # tiny grid for --smoke self-test
     "crossoverValues": [0.5, 0.8],
@@ -142,7 +142,6 @@ def _runTask(task):
 
 # ---- parent side ------------------------------------------------------
 def buildTasks(grid: dict, runs: int, baseSeed: int, seedMode: str):
-    tasks = []
     linear = 0
     for i1, Pc in enumerate(grid["crossoverValues"]):
         for i2, Pm in enumerate(grid["mutationValues"]):
@@ -152,10 +151,9 @@ def buildTasks(grid: dict, runs: int, baseSeed: int, seedMode: str):
                         for r in range(runs):
                             seed = (baseSeed + r if seedMode == "crn"
                                     else baseSeed + linear)
-                            tasks.append(((i1, i2, i3, i4, i5), r, seed,
-                                          Pc, Pm, sel, xo, mut))
+                            yield ((i1, i2, i3, i4, i5), r, seed,
+                                   Pc, Pm, sel, xo, mut)
                             linear += 1
-    return tasks
 
 
 def save(out_dir: str, stamp: str, fitnesses: np.ndarray,
@@ -163,8 +161,10 @@ def save(out_dir: str, stamp: str, fitnesses: np.ndarray,
     os.makedirs(out_dir, exist_ok=True)
     tag = "_partial" if partial else ""
     base = os.path.join(out_dir, f"ga_param_search_parallel_{stamp}{tag}")
-    data = {"fitnesses": fitnesses,
-            "mean_fitnesses": np.nanmean(fitnesses, axis=5)}
+    counts = np.isfinite(fitnesses).sum(axis=5)
+    means = np.divide(np.nansum(fitnesses, axis=5), counts,
+                      out=np.full(counts.shape, np.nan), where=counts > 0)
+    data = {"fitnesses": fitnesses, "mean_fitnesses": means}
     np.savez(base + ".npz", **data)
     written = [base + ".npz"]
     try:
@@ -176,12 +176,28 @@ def save(out_dir: str, stamp: str, fitnesses: np.ndarray,
     with open(base + "_meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
     written.append(base + "_meta.json")
+    with open(base + "_summary.csv", "w", newline="", encoding="utf-8-sig") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["Pc", "Pm", "selection", "crossover", "mutation",
+                         "runs_requested", "runs_completed", "mean_objective_s",
+                         "std_objective_s", "best_objective_s", "worst_objective_s"])
+        for idx in np.ndindex(fitnesses.shape[:5]):
+            values = fitnesses[idx]
+            values = values[np.isfinite(values)]
+            writer.writerow([meta["grid"][key][i] for key, i in zip(GRID_KEYS, idx)] + [
+                fitnesses.shape[5], len(values),
+                float(values.mean()) if len(values) else "",
+                float(values.std(ddof=1)) if len(values) > 1 else "",
+                float(values.min()) if len(values) else "",
+                float(values.max()) if len(values) else ""])
+    written.append(base + "_summary.csv")
     return written
 
 
 def main():
-    defaultWorkers = max(1, (os.cpu_count() or 2) // 2 - 1)
+    defaultWorkers = default_workers()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[2])
+    ap.add_argument("--config", help="complete JSON experiment; do not combine with other flags")
     ap.add_argument("--objective", choices=["destination", "conventional"],
                     default="destination")
     ap.add_argument("--runs", type=int, default=10)
@@ -214,62 +230,96 @@ def main():
                     help="tiny grid/budget self-test (seconds, not hours)")
     args = ap.parse_args()
 
-    from decision.meta.ga import GA
-    grid = dict(GA.PARAM_SEARCH_GRID)
-    if args.smoke:
-        grid = SMOKE_GRID
-        args.runs, args.pop, args.gens = 2, 20, 10
-        args.workers = min(args.workers, 2)
+    try:
+        if args.config:
+            if any(a.startswith("--") and a.split("=")[0] != "--config"
+                   for a in sys.argv[1:]):
+                ap.error("--config cannot be combined with CLI experiment overrides.")
+            spec = load_experiment(args.config)
+        else:
+            if args.smoke:
+                args.runs, args.pop, args.gens = 2, 20, 10
+                args.workers = min(args.workers, 2)
+            spec = validate_experiment({
+                "schemaVersion": 1, "grid": SMOKE_GRID if args.smoke else default_grid(),
+                "snapshot": args.initials, "outputDir": args.out,
+                "objective": args.objective, "populationSize": args.pop,
+                "generations": args.gens, "runs": args.runs, "workers": args.workers,
+                "baseSeed": args.seed, "seedMode": args.seed_mode,
+                "carParams": dict(doorOpeningTime=args.door_open,
+                                  passengerTransferTime=args.transfer_time,
+                                  doorClosingTime=args.door_close,
+                                  carCapacity=args.capacity,
+                                  carCapacityFactor=args.capacity_factor,
+                                  carVelocity=args.velocity, floorHeight=args.floor_height),
+            })
+        if not os.path.isfile(spec["snapshot"]):
+            raise ValueError(f"Snapshot not found: {spec['snapshot']}")
+    except (ValueError, OSError) as exc:
+        ap.error(str(exc))
 
-    shape = (len(grid["crossoverValues"]), len(grid["mutationValues"]),
-             len(grid["selectionFunctions"]),
-             len(grid["crossoverFunctions"]),
-             len(grid["mutationFunctions"]), args.runs)
-    tasks = buildTasks(grid, args.runs, args.seed, args.seed_mode)
-    total = len(tasks)
-    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    grid, carParams = spec["grid"], spec["carParams"]
+    shape = tuple(len(grid[key]) for key in GRID_KEYS) + (spec["runs"],)
+    total = configuration_count(grid) * spec["runs"]
+    tasks = buildTasks(grid, spec["runs"], spec["baseSeed"], spec["seedMode"])
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     if args.smoke:
         stamp += "_smoke"
 
-    carParams = dict(doorOpeningTime=args.door_open,
-                     passengerTransferTime=args.transfer_time,
-                     doorClosingTime=args.door_close,
-                     carCapacity=args.capacity,
-                     carCapacityFactor=args.capacity_factor,
-                     carVelocity=args.velocity,
-                     floorHeight=args.floor_height)
+    # Preserve the actual workbook so reruns do not depend on later edits to
+    # the source. Preflight in the parent avoids a respawning initializer loop
+    # when a workbook is malformed.
+    os.makedirs(spec["outputDir"], exist_ok=True)
+    base = os.path.join(spec["outputDir"], f"ga_param_search_parallel_{stamp}")
+    source_snapshot = spec["snapshot"]
+    spec["snapshot"] = base + "_initials.xlsx"
+    shutil.copyfile(source_snapshot, spec["snapshot"])
+    try:
+        from data_conf import DataConf
+        dc = DataConf(NS(dataType=3, fileName=spec["snapshot"], **carParams))
+        if not any(dc.initialHC.waiting.values()) or not dc.initialCars:
+            raise ValueError("The snapshot needs at least one hall call and one car.")
+    except Exception as exc:
+        ap.error(f"Cannot load custom initials: {exc}")
+    experiment_path = base + "_experiment.json"
+    with open(experiment_path, "w", encoding="utf-8") as stream:
+        json.dump(spec, stream, indent=2, ensure_ascii=False, allow_nan=False)
+    with open(spec["snapshot"], "rb") as stream:
+        snapshot_hash = hashlib.sha256(stream.read()).hexdigest()
 
-    print(f"parallel GA sweep: {int(np.prod(shape[:5]))} configurations "
-          f"x {args.runs} runs = {total} tasks")
-    print(f"  objective={args.objective}  pop={args.pop} "
-          f"gens={args.gens}  seed-mode={args.seed_mode}")
-    print(f"  cars: v={args.velocity:g} m/s, floors {args.floor_height:g} m"
-          f" (inter-floor {args.floor_height / args.velocity:.2f} s),"
-          f" doors {args.door_open:g}+{args.transfer_time:g}"
-          f"+{args.door_close:g} s")
-    print(f"  workers={args.workers} (below-normal priority)  "
-          f"snapshot={os.path.basename(args.initials)}")
+    print(f"parallel GA sweep: {configuration_count(grid)} configurations "
+          f"x {spec['runs']} runs = {total} tasks")
+    print(f"  objective={spec['objective']}  pop={spec['populationSize']} "
+          f"gens={spec['generations']}  seed-mode={spec['seedMode']}")
+    print(f"  workers={spec['workers']} (below-normal priority)  "
+          f"snapshot={os.path.basename(source_snapshot)}")
 
     fitnesses = np.full(shape, np.nan)
-    meta = {"timestamp": stamp, "objective": args.objective,
-            "snapshot": args.initials, "carParams": carParams,
-            "populationSize": args.pop, "generations": args.gens,
-            "runs": args.runs, "seedMode": args.seed_mode,
-            "baseSeed": args.seed, "workers": args.workers,
-            "grid": grid, "host": platform.node(),
-            "cpu": platform.processor()}
+    meta = {"timestamp": stamp, "objective": spec["objective"],
+            "waitingTimeEndpoint": "pickup_door_opening_start",
+            "snapshot": spec["snapshot"], "sourceSnapshot": source_snapshot,
+            "snapshotSHA256": snapshot_hash, "experimentConfig": experiment_path,
+            "carParams": carParams, "populationSize": spec["populationSize"],
+            "generations": spec["generations"], "runs": spec["runs"],
+            "seedMode": spec["seedMode"], "baseSeed": spec["baseSeed"],
+            "workers": spec["workers"], "grid": grid, "host": platform.node(),
+            "cpu": platform.processor(), "tasksRequested": total,
+            "workersUsed": min(spec["workers"], total)}
 
     t0 = time.perf_counter()
     done = 0
     interrupted = False
+    error = None
     ctx = mp.get_context("spawn")
-    pool = ctx.Pool(processes=args.workers, initializer=_initWorker,
-                    initargs=(args.initials, args.objective,
-                              args.pop, args.gens, carParams))
+    pool = ctx.Pool(processes=min(spec["workers"], total), initializer=_initWorker,
+                    initargs=(spec["snapshot"], spec["objective"],
+                              spec["populationSize"], spec["generations"], carParams))
     try:
         every = max(1, total // 200)
         for idx, runIdx, cost in pool.imap_unordered(_runTask, tasks,
                                                      chunksize=1):
+            if not np.isfinite(cost):
+                raise ValueError("GA returned a non-finite objective value.")
             fitnesses[idx + (runIdx,)] = cost
             done += 1
             if done % every == 0 or done == total:
@@ -285,14 +335,25 @@ def main():
               f"({done}/{total} tasks done, unfinished cells = NaN)")
         pool.terminate()
         pool.join()
+    except Exception as exc:
+        error = str(exc)
+        pool.terminate()
+        pool.join()
 
     meta["tasksCompleted"] = done
     meta["elapsedSeconds"] = round(time.perf_counter() - t0, 1)
-    written = save(args.out, stamp, fitnesses, meta, interrupted)
+    meta["status"] = "failed" if error else "interrupted" if interrupted else "complete"
+    if error:
+        meta["error"] = error
+    written = save(spec["outputDir"], stamp, fitnesses, meta, interrupted or error is not None)
     print(f"\ndone in {meta['elapsedSeconds'] / 60:.1f} min; saved:")
     for path in written:
         print(f"  {path}")
+    if error:
+        print(f"Search failed: {error}", file=sys.stderr)
+        return 1
+    return 130 if interrupted else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

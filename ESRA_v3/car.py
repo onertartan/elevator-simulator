@@ -142,6 +142,8 @@ class Car:
 
         self.stopOverCounter = 0.0
         self.numOfStops = 0
+        self.doorOpeningStartTime: Optional[float] = None
+        self._doorCycleFloor: Optional[float] = None
         self.tripTime = 0.0
         self.load = 0
         self.numOfServedPassengers = 0
@@ -202,7 +204,7 @@ class Car:
             self.numOfStops += 1
 
         if self.isAtDF():   # if the car is at a destination floor, start the door cycle
-            self.beginDropoff()
+            self.beginDropoff(currentTime)
 
         if self.isAtHC(): # at a call floor: answer the call, queue boarders [A4]
             self.beginPickup(HC, P, currentTime)
@@ -222,13 +224,28 @@ class Car:
             or (self.state == 0 and (up_here or down_here))
         )
 
-    def beginDropoff(self) -> None:
+    def _startDoorCycle(self, currentTime: float) -> None:
+        """Record opening onset without changing the existing timer/restart policy.
+
+        A same-floor pickup during opening/transfer belongs to the already
+        available service, even though the legacy counter restarts. During
+        closing (or after departure) it is a new opening event. Passengers
+        already accepted keep their own original event timestamp.
+        """
+        if not (self.doorOpeningStartTime is not None
+                and self._doorCycleFloor == self.floor
+                and self.stopOverCounter > self.doorClosingTime + 1e-9):
+            self.doorOpeningStartTime = float(currentTime)
+            self._doorCycleFloor = self.floor
+        self.stopOverCounter = float(self.stopOverTime)
+
+    def beginDropoff(self, currentTime: float) -> None:
         """
         [A1] Arrival at a destination floor: start the door cycle. The
         passengers stay inside (pendingAlight) until the doors are open;
         the stats/list transfer moved to updateDoorCycle().
         """
-        self.stopOverCounter = float(self.stopOverTime)
+        self._startDoorCycle(currentTime)
         for dir_ in (1, 2):
             if self.P.travelling[dir_]:
                 passengers_here = [p for p in self.P.travelling[dir_] if p.DF == self.floor]
@@ -282,10 +299,10 @@ class Car:
             self.pendingAlight.clear()
 
         # [A4] Door-open, boarding side: the passengers selected at the
-        # hall call board NOW - WT freezes here (arrival +
-        # doorOpeningTime) - and start walking from the hall lane to the
-        # cabin. Runs AFTER the alighting block so alighters free their
-        # space first: load stays <= capacity even on combined stops.
+        # hall call board NOW - BT and WT_board are finalized here, while
+        # primary WT uses the accepting service's opening START - and start
+        # walking from the hall lane to the cabin. Runs AFTER alighting so
+        # load stays <= capacity even on combined stops.
         if self.pendingBoard and self.stopOverCounter <= doorsOpenAt + eps:
             for entry in self.pendingBoard:
                 passenger, dir_ = entry["p"], entry["dir"]
@@ -333,9 +350,8 @@ class Car:
           - the boarders are selected NOW with the original capacity
             check and leftover hall-call recreation (identical timing);
           - the selected passengers go to pendingBoard but STAY in the
-            waiting lists, so their WT keeps counting while the doors
-            open: Pawt grows by doorOpeningTime versus the old
-            instantaneous pickup;
+            waiting lists. Primary WT freezes at this accepting service's
+            opening start; WT_board keeps counting until actual boarding;
           - board()/transfers/load/DF happen in updateDoorCycle at the
             door-open moment, AFTER the alighting block, so on combined
             stops the load never exceeds capacity any more (this
@@ -376,9 +392,11 @@ class Car:
             HC.add(HallCall(self.floor, currentTime, dir_))
 
         num_accept = max(0, min(available_space, len(passengers_here)))
+        if num_accept:
+            self._startDoorCycle(currentTime)
         for passenger in passengers_here[:num_accept]:
+            passenger.start_pickup(self.doorOpeningStartTime)
             self.pendingBoard.append({"p": passenger, "dir": dir_})
-            self.stopOverCounter = float(self.stopOverTime)
 
     def updateState(self, updateType: str) -> None:
         """

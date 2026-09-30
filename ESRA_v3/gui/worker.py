@@ -88,6 +88,7 @@ class ExperimentWorker(QThread):
 
     error = Signal(str)     # emitted with a traceback string on failure
     frame = Signal(object)  # optional: displayTraffic -> GUI payloads
+    status = Signal(str)    # long-running dispatcher progress -> GUI status bar
 
     def __init__(self, experiment, start_data, app_window, parent=None):
         super().__init__(parent)
@@ -96,8 +97,13 @@ class ExperimentWorker(QThread):
         self.app_window = app_window
 
     def run(self):
+        from decision.exact_dispatcher import ExactDispatchCancelled
         try:
             self.experiment.run(self.start_data, self.app_window)
+        except ExactDispatchCancelled:
+            # No partial assignment or successful result is published.
+            # Terminate is a normal stop, not an experiment-error dialog.
+            pass
         except Exception:
             import traceback
             self.error.emit(traceback.format_exc())

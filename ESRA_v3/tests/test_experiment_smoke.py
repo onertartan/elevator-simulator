@@ -80,10 +80,9 @@ def test_full_run(tmpdir="."):
     assert dataConf is not None
     assert len(dataConf.RECnew) == 2, "one record per simulation expected"
     assert exp.Pawt is not None and exp.Pawt.shape == (1, 1, 1, 1)
-    assert exp.Pawt[0, 0, 0, 0] == 4.0, \
+    assert exp.Pawt[0, 0, 0, 0] == 2.0, \
         "user Dispatcher.run updates states in the decision step, so the " \
-        "car arrives at t=2; boarding waits for the doors to open " \
-        "(doorOpeningTime=2): WT freezes at t=4 [A4]"
+        "car starts opening at t=2; primary WT freezes there, boarding stays t=4"
     assert os.path.exists(exp.resultsFile)
 
     # Real Car + real Controller trip physics (per simulation):
@@ -97,6 +96,9 @@ def test_full_run(tmpdir="."):
     p = rec.P.served[1][0]
     assert (p.BT, p.DAT, p.TrT) == (4, 15, 11), \
         "board/alight both shift by doorOpeningTime=2, transit unchanged"
+    assert (p.WT, p.WT_board, p.doorOpeningStartTime) == (2, 4, 2)
+    assert p.TTD == p.WT_board + p.TrT == 15
+    assert rec.waiting_time_endpoint == "pickup_door_opening_start"
     assert rec.HC.served[1][0].WT == 2.0, \
         "hall call is answered at car arrival (t=2), before the doors open [A4]"
 
@@ -106,10 +108,14 @@ def test_full_run(tmpdir="."):
     assert ws["A1"].value == "Average Passenger Waiting Time"
     assert ws["B1"].value == "Interfloor_40"
     assert ws["A2"].value == "Incoming_30"
-    assert ws["B2"].value == 4.0
+    assert ws["B2"].value == 2.0
     # second table starts len(Tp)+2 rows below (0-indexed) -> row 4 (1-indexed)
     assert ws["A4"].value == "Average Hall Call Waiting Time"
     assert ws["B5"].value == 2.0
+    assert ws["A7"].value == "Average Passenger Wait to Boarding"
+    assert ws["B8"].value == 4.0
+    assert "Metric definitions" in wb.sheetnames
+    assert "opening start" in wb["Metric definitions"]["B2"].value
     print(f"PASS  full run -> {os.path.basename(exp.resultsFile)}")
     os.remove(exp.resultsFile)
 
@@ -204,10 +210,10 @@ def test_recorded_roundtrip():
     _run(exp2, start2)
     assert StubSimulator.getSetEndTime() == 0, "DataConf case 2 zeroes it"
     assert len(exp2.dataConf.RECnew) == 2, "both recorded sims replayed"
-    assert exp2.Pawt[0, 0, 0, 0] == 4.0, \
+    assert exp2.Pawt[0, 0, 0, 0] == 2.0, \
         "replay must reproduce the recorded waiting time exactly"
     replayed = exp2.dataConf.RECnew[recKey(1, 1, 1, 1, 1)].P.served[1][0]
-    assert (replayed.WT, replayed.BT, replayed.DAT) == (4, 4, 15)
+    assert (replayed.WT, replayed.WT_board, replayed.BT, replayed.DAT) == (2, 4, 4, 15)
     os.remove(exp2.resultsFile)
 
     os.remove(pkl)
@@ -233,7 +239,7 @@ def test_sparse_ranged_traffic():
     # 3 valid combos: (90,0) (90,10) (100,0)
     assert len(exp.dataConf.RECnew) == 3
     assert exp.Pawt.shape == (1, 1, 2, 3)
-    assert exp.Pawt[0, 0, 0, 0] == 4.0 and exp.Pawt[0, 0, 1, 0] == 4.0
+    assert exp.Pawt[0, 0, 0, 0] == 2.0 and exp.Pawt[0, 0, 1, 0] == 2.0
     assert np.isnan(exp.Pawt[0, 0, 0, 2]), "invalid combo must be NaN"
     assert np.isnan(exp.Pawt[0, 0, 1, 1]) and np.isnan(exp.Pawt[0, 0, 1, 2])
     assert "Incoming-90-100" in exp.resultsFile.replace("Traffic", "")
@@ -243,7 +249,7 @@ def test_sparse_ranged_traffic():
     assert [ws.cell(1, c).value for c in (2, 3, 4)] == \
         ["Interfloor_0", "Interfloor_10", "Interfloor_20"], "[D8] 10-step labels"
     assert ws["A2"].value == "Incoming_90" and ws["A3"].value == "Incoming_100"
-    assert ws["B2"].value == 4.0 and ws["B3"].value == 4.0
+    assert ws["B2"].value == 2.0 and ws["B3"].value == 2.0
     assert ws["D2"].value is None and ws["C3"].value is None, "[D9] NaN cells"
     # second table: MATLAB rule rows+1+2 -> header on sheet row 5 here
     assert ws["A5"].value == "Average Hall Call Waiting Time"
@@ -291,8 +297,13 @@ def test_display_frames():
     assert car_table["rows"][0] == "Car position"
     last = frames[-1]
     assert last["tables"]["results"][3] == "1", "1 served passenger"
-    assert last["tables"]["results"][6] == "4.00", \
-        "avg passenger WT (boarding waits for doorOpeningTime=2 [A4])"
+    assert last["tables"]["results"][6] == "2.00", \
+        "avg passenger WT ends at pickup opening start"
+    assert last["tables"]["results"][8:] == ["4", "4.00"], "secondary wait to boarding"
+    pending = next(f for f in frames if f["flow"]["cars"][0]["pendingBoard"])
+    assert pending["tables"]["passengers"][1]["data"][3] == ["2"], "frozen primary WT"
+    assert pending["time"] == 3
+    assert pending["tables"]["passengers"][1]["data"][5] == ["3"], "boarding wait still advances"
     assert len(last["counters"]) == 6
     os.remove(exp.resultsFile)
     globals()["_captured_frames"] = frames   # reused by the render demo

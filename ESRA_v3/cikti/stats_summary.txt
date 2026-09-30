@@ -1,0 +1,88 @@
+GA parameter search (dataset B, Python sweep)
+  1575 configurations x 100 runs = 157500 GA executions
+  grid: Pc [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], Pm [0.01, 0.02, 0.05, 0.1, 0.2]
+        selection ['stochunif', 'roulette', 'tournament'], crossover ['scattered', 'singlepoint', 'twopoint'], mutation ['uniform', 'block', 'scramble', 'swap', 'frequency']
+  snapshot E:/oner/elevator-simulator/ESRA_v3/initials_file.xlsx, 17 passengers (AWT is quantised to 1/17 s)
+  model constants: TF = 2 s, PT = 7 s, carCapacity 10, carCapacityFactor 1.0, carVelocity 1.5, floorHeight 3.0
+  GA: population 100, generations 50, seedMode crn, baseSeed 0
+  sweep wall clock 130196.2 s on 7 workers
+
+cost = actual average passenger waiting time (s) of the best solution a run produced; lower is better. Destination control means arrival floors are known, so this is the realised waiting time, not an estimate.
+
+All runs: mean 21.9035  sd 3.6982  min 17.4118  max 43.1765
+Distinct AWT values observed: 393
+Best known AWT (BKS) = 17.4118 s = 296/17, reached by 1.34 % of all runs
+
+596 of 1575 configurations reached the BKS at least once; best hit count 14/100
+Configuration means span 18.1453 - 30.9747 s (worst is +70.7 % over best; equivalently 41.4 % lower AWT from configuring the same algorithm well)
+
+RANK 1 (lowest mean) -- reported as ONE MEMBER of the top region, never as 'the' configuration:
+  Pc=0.3 Pm=0.2 tournament + scattered + frequency
+  mean 18.1453  sd 0.8127  hits 6/100
+RANK 1575 (worst): Pc=0.3 Pm=0.01 roulette + singlepoint + block, mean 30.9747
+
+PAIRWISE LEVEL COMPARISONS: 47 (= sum of C(levels,2) = 21+10+3+3+10)
+
+VARIANCE DECOMPOSITION (5 main effects + all 10 two-way interactions; balanced full factorial, so Type I = II = III and the shares are exact)
+  total SS 2154111.8 over N = 157500, grand mean 21.9035 s, total sd 3.6982 s
+  rho = sqrt(SS/N) as a percentage of the grand mean: an ABSOLUTE
+  RMS effect. %SS is a share and falls when another term grows,
+  so the two must be read together.
+
+  source                          df      %SS    rho%           F          p
+  Mutation fn                      4   32.751    9.66     30805.9          0
+  Pm                               4   11.260    5.67     10591.4          0
+  Crossover fn                     2    5.739    4.04     10796.7          0
+  Pm x Mutation fn                16    2.666    2.76       626.9          0
+  Crossover fn x Mutation fn       8    1.845    2.29       867.7          0
+  Pc x Mutation fn                24    1.501    2.07       235.3          0
+  Pc x Pm                         24    0.669    1.38       104.9          0
+  Pc                               6    0.471    1.16       295.3          0
+  Pm x Crossover fn                8    0.404    1.07       190.0          0
+  Pc x Crossover fn               12    0.331    0.97       103.7     4e-258
+  Selection                        2    0.240    0.83       451.2  4.02e-196
+  Pm x Selection                   8    0.128    0.60        60.1   1.55e-98
+  Selection x Mutation fn          8    0.102    0.54        47.8    1.4e-77
+  Pc x Selection                  12    0.070    0.45        22.0   1.38e-49
+  Selection x Crossover fn         4    0.001    0.06         1.3      0.256
+  Residual                    157357   41.823   10.92
+
+  statsmodels cross-check: residual SS agrees to 2.1e-15 relative
+
+COMMON RANDOM NUMBERS CHECK (run index as a blocking factor):
+  SS share 3.69 % of total, 9.22 % of the within-cell variation, F(99, .) = 159.9, p = 0
+  A significant run effect is EXPECTED under CRN and is what makes
+  run r comparable across configurations. Paired tests (Wilcoxon
+  signed-rank, Friedman) are therefore valid on this dataset.
+
+EQUIVALENCE SET vs rank 1 (uncorrected Welch, alpha = 0.05): 38 of 1575 configurations
+  paired Wilcoxon (CRN-exploiting, more powerful): 29 configurations
+  composition (Welch set): {'Selection': {'tournament': 32, 'stochunif': 5, 'roulette': 1}, 'Crossover fn': {'scattered': 27, 'twopoint': 8, 'singlepoint': 3}, 'Mutation fn': {'frequency': 27, 'uniform': 11}, 'Pm': {0.1: 18, 0.2: 15, 0.05: 5}, 'Pc': {0.3: 9, 0.4: 9, 0.5: 8, 0.6: 6, 0.7: 5, 0.8: 1}}
+  after Holm over 1574 comparisons, 1433 remain significantly worse; after BH, 1537
+  -> the top of the ranking is a REGION, not a point.
+
+RECOMMENDED BLOCK (this is the recommendation; the single point below is a convenience, not a finding):
+  tournament + scattered + frequency, Pc in [0.3, 0.4, 0.5], Pm in [0.1, 0.2]
+  6 cells x 100 runs = 600 runs, pooled mean 18.1983 s (sd 0.9207)
+  cell means 18.1453 - 18.2406 s, ranks 1-12
+  6/6 cells inside the equivalence set
+  success rate 8.83 % vs 1.34 % over the whole grid
+
+SINGLE POINT for readers who need one: Pc = 0.4, Pm = 0.2, tournament + scattered + frequency
+  rank 12, mean 18.2406 s, sd 0.9512, hits 8/100
+  vs rank 1: Welch p = 0.4472, paired Wilcoxon p = 0.8768
+  neighbour robustness: worst adjacent (Pc,Pm) cell 18.2312 s (own mean 18.2406)
+  vs the worst configuration in the grid: 41.1 % lower AWT
+
+Pc SLOPE DECOMPOSED BY MUTATION OPERATOR QUALITY
+  (MATLAB ga draws a 1-Pc share of each generation from
+   mutation, so Pc is also a 'how much mutation' knob.)
+  label-generating (frequency/uniform) 0.3:18.981  0.4:18.981  0.5:19.001  0.6:19.096  0.7:19.275  0.8:19.565  0.9:20.337
+    slope 0.3->0.9 = +1.356 s
+  rearrangement-only                 0.3:24.663  0.4:24.119  0.5:23.745  0.6:23.433  0.7:23.220  0.8:23.055  0.9:23.149
+    slope 0.3->0.9 = -1.515 s
+
+BOUNDARY CHECK
+  Pc marginal  0.3:22.391  0.4:22.064  0.5:21.847  0.6:21.698  0.7:21.642  0.8:21.659  0.9:22.024
+  -> optimum at Pc = 0.7, which is INTERIOR to the searched grid
+  Pm marginal  0.01:23.717  0.02:22.839  0.05:21.737  0.1:20.909  0.2:20.316

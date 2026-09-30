@@ -86,13 +86,15 @@ class Controller:
             else:
                 continue
 
-        # Increment the waiting times of waiting calls/passengers [E2]
+        # Hall-call timing is unchanged. Passenger primary WT freezes once
+        # accepted by an opening service; the boarding-aligned measure keeps
+        # counting while pendingBoard remains in the waiting lists.
         # (dir 1: upwards, dir 2: downwards)
         for dir_ in (1, 2):
             for hallCall in HC.waiting[dir_]:
                 hallCall.WT += simulator.Ts
             for passenger in P.waiting[dir_]:
-                passenger.WT += simulator.Ts
+                passenger.advance_waiting_time(simulator.time + simulator.Ts)
 
         # Advance the simulation clock
         simulator.time = simulator.time + simulator.Ts

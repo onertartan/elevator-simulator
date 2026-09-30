@@ -383,11 +383,13 @@ class Experiment:
                     ncars = len(dataConf.CAR[ncc - 1])
                     PawtTable = np.zeros((Nicc, Nifc))
                     HCawtTable = np.zeros((Nicc, Nifc))
+                    PboardTable = np.zeros((Nicc, Nifc))
 
                     for icc in range(1, Nicc + 1):
                         for ifc in range(1, Nifc + 1):
                             tempPawt: List[float] = []
                             tempHCawt: List[float] = []
+                            tempPboard: List[float] = []
                             for ns in range(1, NS + 1):
                                 # [D8] Invalid traffic combos (inc+int>100)
                                 # never produce a record; MATLAB would hit
@@ -397,6 +399,7 @@ class Experiment:
                                 if rec is None:
                                     tempPawt.append(float("nan"))
                                     tempHCawt.append(float("nan"))
+                                    tempPboard.append(float("nan"))
                                     continue
                                 p_up = rec.P.served[1]
                                 p_down = rec.P.served[2]
@@ -406,11 +409,15 @@ class Experiment:
                                       if p.QJT != -1]
                                 hw = [h.WT for h in list(hc_up) + list(hc_down)
                                       if h.QJT != -1]
+                                pb = [p.WT_board for p in list(p_up) + list(p_down)
+                                      if p.QJT != -1]
                                 # MATLAB mean([]) is NaN
                                 tempPawt.append(
                                     float(np.mean(pw)) if pw else float("nan"))
                                 tempHCawt.append(
                                     float(np.mean(hw)) if hw else float("nan"))
+                                tempPboard.append(
+                                    float(np.mean(pb)) if pb else float("nan"))
 
                             m_p = float(np.mean(tempPawt))
                             m_h = float(np.mean(tempHCawt))
@@ -418,6 +425,7 @@ class Experiment:
                             PawtTable[icc - 1, ifc - 1] = m_p
                             HCawt[nbc - 1, ncc - 1, icc - 1, ifc - 1] = m_h
                             HCawtTable[icc - 1, ifc - 1] = m_h
+                            PboardTable[icc - 1, ifc - 1] = float(np.mean(tempPboard))
 
                     Tp = pd.DataFrame(PawtTable, index=rowNames,
                                       columns=colNames)
@@ -425,11 +433,28 @@ class Experiment:
                     Thc = pd.DataFrame(HCawtTable, index=rowNames,
                                        columns=colNames)
                     Thc.index.name = "Average Hall Call Waiting Time"
+                    Tboard = pd.DataFrame(PboardTable, index=rowNames, columns=colNames)
+                    Tboard.index.name = "Average Passenger Wait to Boarding"
 
                     sheetName = f"NumFloors-{nfloor}-NumCars-{ncars}"
                     Tp.to_excel(writer, sheet_name=sheetName)
                     # MATLAB: Range A{rows+3} (1-indexed) -> startrow rows+2
                     Thc.to_excel(writer, sheet_name=sheetName,
                                  startrow=len(Tp) + 2)
+                    Tboard.to_excel(writer, sheet_name=sheetName,
+                                    startrow=2 * (len(Tp) + 2))
+
+            # Keep the existing first two tables/return signature compatible.
+            # The additional table and definitions distinguish new metrics from
+            # historical full-open WT results; old workbooks are not converted.
+            pd.DataFrame([
+                ("Passenger WT", "Queue join to opening start of the car that accepts "
+                 "the passenger; zero if joining its opening/open phase."),
+                ("Passenger wait to boarding", "WT_board = BT - QJT; boarding at fully-open doors."),
+                ("Hall-call WT", "Unchanged call-response timing; not passenger weighted."),
+                ("BT / DAT / TrT / TTD", "Unchanged animation events; "
+                 "TTD = WT_board + TrT, not generally WT + TrT."),
+            ], columns=["Metric", "Definition (seconds)"]).to_excel(
+                writer, sheet_name="Metric definitions", index=False)
 
         return Pawt, HCawt, filePath

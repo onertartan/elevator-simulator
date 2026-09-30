@@ -4,7 +4,7 @@ gui/tabs/control_method.py
 Tab 3: 'Control Method'. Ported from the MATLAB source:
 
   * Control method radio group: Nearest Car Method,
-    Metaheuristics (default), Markov Decision Process.
+    Metaheuristics (default), Exact Dispatcher, Markov Decision Process.
   * Objective Function dropdown (default 'Destination Information').
   * Metaheuristics panel:
       - Algorithm radios: Genetic Algorithm (default), Ant Colony
@@ -22,7 +22,7 @@ Tab 3: 'Control Method'. Ported from the MATLAB source:
 """
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox, QLabel,
-    QSpinBox, QDoubleSpinBox, QComboBox, QRadioButton, QButtonGroup
+    QSpinBox, QDoubleSpinBox, QComboBox, QRadioButton, QButtonGroup, QPushButton
 )
 
 
@@ -57,9 +57,10 @@ class ControlMethodTab(QWidget):
         self.nearest_car_rb = QRadioButton("Nearest Car Method")
         self.metaheuristics_rb = QRadioButton("Metaheuristics")
         self.metaheuristics_rb.setChecked(True)  # default in MATLAB
+        self.exact_rb = QRadioButton("Exact Dispatcher (Subset DP)")
         self.mdp_rb = QRadioButton("Markov Decision Process")
         method_group = QButtonGroup(self)
-        for rb in (self.nearest_car_rb, self.metaheuristics_rb, self.mdp_rb):
+        for rb in (self.nearest_car_rb, self.metaheuristics_rb, self.exact_rb, self.mdp_rb):
             method_group.addButton(rb)
             mb.addWidget(rb)
 
@@ -75,6 +76,31 @@ class ControlMethodTab(QWidget):
         obj_row.addStretch()
         mb.addLayout(obj_row)
         layout.addWidget(method_box)
+
+        self.exact_panel = QGroupBox("Exact assignment")
+        exact = QVBoxLayout(self.exact_panel)
+        limits = QHBoxLayout()
+        limits.addWidget(QLabel("Maximum calls"))
+        self.exact_max_calls = _ispin(1, 30, 16)
+        limits.addWidget(self.exact_max_calls)
+        limits.addWidget(QLabel("Time limit per decision (s)"))
+        self.exact_time_limit = _dspin(0.001, 86400, 120, decimals=3, step=10)
+        self.exact_time_limit.setFixedWidth(120)
+        limits.addWidget(self.exact_time_limit)
+        limits.addStretch()
+        exact.addLayout(limits)
+        exact_note = QLabel(
+            "Minimizes estimated mean passenger waiting time to pickup door-opening start "
+            "(Destination / WT). "
+            "Optimization assumes unlimited capacity; simulation capacity is unchanged. "
+            "Recommended: one-shot dispatch with no new arrivals. Repeated decisions "
+            "can be expensive; snapshots during pending boarding are not supported. "
+            "Timeouts stop the run without a heuristic fallback. Terminate cancels the solve.")
+        exact_note.setWordWrap(True)
+        exact.addWidget(exact_note)
+        layout.addWidget(self.exact_panel)
+        self._exact_active = False
+        self._objective_before_exact = self.objective_function.currentText()
 
         # ---- Metaheuristics panel -----------------------------------------
         self.meta_box = QGroupBox("Metaheuristics")
@@ -138,6 +164,8 @@ class ControlMethodTab(QWidget):
             sel_group.addButton(rb)
             sb.addWidget(rb)
         ga.addWidget(selection_box, 0, 3, 2, 1)
+        self.ga_search_button = QPushButton("Run GA Parameter Search...")
+        ga.addWidget(self.ga_search_button, 2, 0, 1, 4)
         meta.addWidget(self.ga_panel, 2, 0, 1, 4)
 
         # Mutation function group (shared, per MATLAB startData)
@@ -214,9 +242,23 @@ class ControlMethodTab(QWidget):
         # enable/disable algorithm sub-panels
         for rb in (self.ga_rb, self.aco_rb, self.pso_rb, self.de_rb):
             rb.toggled.connect(self._update_algo_panels)
-        self.metaheuristics_rb.toggled.connect(
-            lambda on: self.meta_box.setEnabled(on))
+        for rb in (self.nearest_car_rb, self.metaheuristics_rb, self.exact_rb, self.mdp_rb):
+            rb.toggled.connect(self._update_method_panels)
         self._update_algo_panels()
+        self._update_method_panels()
+
+    def _update_method_panels(self):
+        exact = self.exact_rb.isChecked()
+        if exact and not self._exact_active:
+            self._objective_before_exact = self.objective_function.currentText()
+            self.objective_function.setCurrentText("Destination Information")
+        elif not exact and self._exact_active:
+            self.objective_function.setCurrentText(self._objective_before_exact)
+        self._exact_active = exact
+        self.objective_function.setEnabled(not exact)
+        self.exact_panel.setVisible(exact)
+        self.meta_box.setEnabled(self.metaheuristics_rb.isChecked())
+        self.meta_box.setVisible(not exact)
 
     def _sync_w_end(self):
         if self.pso_w_end.value() > self.pso_w_start.value():
@@ -241,6 +283,13 @@ class ControlMethodTab(QWidget):
             data.update({"controlMethod": "NearestCar",
                          "stateUpdateTypeForNextDecision": "fixed",
                          "availableInformation": 1})
+        elif self.exact_rb.isChecked():
+            data.update({"controlMethod": "Exact",
+                         "objectiveFunction": "Destination Information",
+                         "stateUpdateTypeForNextDecision": "fixed",
+                         "availableInformation": 1,
+                         "exactMaxCalls": self.exact_max_calls.value(),
+                         "exactTimeLimitSeconds": self.exact_time_limit.value()})
         elif self.metaheuristics_rb.isChecked():
             data.update({
                 "controlMethod": "Metaheuristics",
@@ -292,8 +341,12 @@ class ControlMethodTab(QWidget):
         return {
             "method": ("nearest" if self.nearest_car_rb.isChecked()
                        else "meta" if self.metaheuristics_rb.isChecked()
+                       else "exact" if self.exact_rb.isChecked()
                        else "mdp"),
             "objective_function": self.objective_function.currentText(),
+            "objective_before_exact": self._objective_before_exact,
+            "exact_max_calls": self.exact_max_calls.value(),
+            "exact_time_limit": self.exact_time_limit.value(),
             "algorithm": ("GA" if self.ga_rb.isChecked() else
                           "ACO" if self.aco_rb.isChecked() else
                           "PSO" if self.pso_rb.isChecked() else "DE"),
@@ -322,8 +375,12 @@ class ControlMethodTab(QWidget):
 
     def from_state(self, s):
         {"nearest": self.nearest_car_rb, "meta": self.metaheuristics_rb,
-         "mdp": self.mdp_rb}[s["method"]].setChecked(True)
-        self.objective_function.setCurrentText(s["objective_function"])
+         "exact": self.exact_rb, "mdp": self.mdp_rb}[s["method"]].setChecked(True)
+        self._objective_before_exact = s.get("objective_before_exact", s["objective_function"])
+        self.objective_function.setCurrentText(
+            "Destination Information" if self.exact_rb.isChecked() else s["objective_function"])
+        self.exact_max_calls.setValue(s.get("exact_max_calls", 16))
+        self.exact_time_limit.setValue(s.get("exact_time_limit", 120.0))
         {"GA": self.ga_rb, "ACO": self.aco_rb,
          "PSO": self.pso_rb, "DE": self.de_rb}[s["algorithm"]].setChecked(True)
         self.population_size.setValue(s["population_size"])
