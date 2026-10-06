@@ -12,3 +12,6 @@ __pycache__/
 
 # Environment files
 .env
+
+# Local reports excluded from the published ESRA_v3 snapshot
+/ESRA_v3/reports/

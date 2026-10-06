@@ -1,0 +1,100 @@
+{
+  "building": {
+    "floor_height": 3.0,
+    "floors": {
+      "range": [
+        20,
+        20
+      ],
+      "fixed": 20,
+      "step": "1",
+      "min_label": "20",
+      "max_label": "20",
+      "lamp_fixed_on": true
+    },
+    "cars": {
+      "range": [
+        5,
+        5
+      ],
+      "fixed": 5,
+      "step": "1",
+      "min_label": "5",
+      "max_label": "5",
+      "lamp_fixed_on": true
+    },
+    "car_capacity": 10,
+    "car_velocity": 1.5,
+    "car_capacity_factor": 1.0,
+    "door_opening_time": 2,
+    "door_closing_time": 2,
+    "passenger_transfer_time": 3,
+    "parking_method": "Park1 (No parking method)"
+  },
+  "traffic": {
+    "incoming_range": [
+      0,
+      100
+    ],
+    "interfloor_range": [
+      0,
+      100
+    ],
+    "fixed_incoming": 30,
+    "fixed_interfloor": 40,
+    "fixed_outgoing": 30,
+    "no_new_passenger": true,
+    "arrival_rate": 10.0,
+    "lamp_fixed_on": true
+  },
+  "control": {
+    "method": "meta",
+    "objective_function": "Destination Information",
+    "objective_before_exact": "Destination Information",
+    "exact_max_calls": 16,
+    "exact_time_limit": 120.0,
+    "algorithm": "GA",
+    "population_size": 100,
+    "max_iterations": 50,
+    "ga_mutation_rate": 0.01,
+    "ga_crossover_rate": 0.8,
+    "crossover_fcn": "crossoverscattered",
+    "selection_fcn": "selectionstochunif",
+    "mutation_fcn": "uniform",
+    "aco": [
+      1.0,
+      0.5,
+      1,
+      2.0
+    ],
+    "pso": [
+      0.8,
+      0.8,
+      0.8,
+      0.2,
+      0.2
+    ],
+    "de": [
+      0.4,
+      0.8,
+      "rand/1"
+    ]
+  },
+  "simulation": {
+    "data_type": 3,
+    "file_name": "E:/oner/elevator-simulator/ESRA_v3/initials_file_orj.xlsx",
+    "custom_initials_mode": "load",
+    "num_initial_passengers": 0,
+    "simulation_duration": 15,
+    "num_simulations": 1,
+    "reference_time": 0,
+    "one_shot": true,
+    "dispatch_period": 1
+  },
+  "display": {
+    "display_traffic_flow": true,
+    "display_tabular_data": true,
+    "speed": 1
+  },
+  "ga_parameter_search": {}
+}

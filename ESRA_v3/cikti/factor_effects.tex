@@ -1,0 +1,23 @@
+\begin{table}[t]
+\centering
+\small
+\caption{Main effect of each configuration setting, on the variance
+scale and on the rank scale. $\eta^2$ is the exact share of the total
+sum of squares (the design is balanced), $\rho=\sqrt{SS/N}$ the
+corresponding root-mean-square effect as a percentage of the grand
+mean, and $\varepsilon^2$ the Kruskal--Wallis counterpart of $\eta^2$.
+Every setting is significant at $p<0.001$ at this sample size, so the
+informative quantity is the size, not the verdict.}
+\label{tab:factor-effects}
+\begin{tabular}{lrrrr}
+\toprule
+Setting & $\eta^2$ & $\rho$ (\%) & $\varepsilon^2$ & KW $H$\\
+\midrule
+Mutation method & 0.3275 & 9.66 & 0.4015 & 63243\\
+Mutation rate $P_m$ & 0.1126 & 5.67 & 0.0954 & 15031\\
+Crossover method & 0.0574 & 4.04 & 0.0532 & 8382\\
+Crossover rate $P_c$ & 0.0047 & 1.16 & 0.0032 & 507\\
+Selection method & 0.0024 & 0.83 & 0.0024 & 377\\
+\bottomrule
+\end{tabular}
+\end{table}

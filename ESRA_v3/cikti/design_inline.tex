@@ -1,0 +1,9 @@
+% Drop-in replacement for Table~\ref{tab:design} and the sentence
+% that introduces it, for when the page budget cannot afford the float.
+The parameter search enumerates a full factorial design over five settings:
+the crossover rate $P_c\in\{0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9\}$, the mutation rate $P_m\in\{0.01, 0.02, 0.05, 0.1, 0.2\}$, three
+selection methods (stochastic uniform, roulette wheel, tournament), three
+crossover methods (scattered, single point, two point) and five mutation
+methods (uniform, block, scramble, swap, frequency). The
+$7\times5\times3\times3\times5=1575$ resulting configurations were each
+executed 100 times under common random numbers, giving 157\,500 GA runs in total.

@@ -1,0 +1,189 @@
+ classdef PSO < MetaheuristicDispatcher
+    properties
+        w_start     % Initial inertia weight
+        w_end       % Final inertia weight
+        w           % Current inertia weight (will be updated during optimization)
+        c1          % Cognitive component
+        c2          % Social component
+        c3          % Uniform exploration component (optional)
+        velocities  % Probability matrices for each particle
+    end
+    
+    methods
+        function dispatcher = PSO(startData)
+            dispatcher@MetaheuristicDispatcher(startData);
+            
+            % Set adaptive inertia weight parameters
+            dispatcher.w_start = startData.w_start; % e.g., 0.9
+            dispatcher.w_end = startData.w_end;     % e.g., 0.4
+            dispatcher.w = dispatcher.w_start;      % Initialize with starting value
+            
+            dispatcher.c1 = startData.c1;
+            dispatcher.c2 = startData.c2;
+            dispatcher.c3 = startData.c3; % Optional uniform exploration
+            
+
+        end
+        
+        function [bestSolution, bestCost] = optimize(dispatcher, objFun)
+
+             if dispatcher.parameterSearch
+                numRuns = dispatcher.numRunsForDispatcher;
+                 c1_values = 0.1:0.1:1.0;
+                 c2_values = 0.1:0.1:1.0;
+                 c3_values = 0:0.1:1.0; % can also be 0 if you don’t use uniform exploration                 
+             else
+                 numRuns = 1;
+                c1_values = [dispatcher.c1];
+                c2_values = [dispatcher.c2];
+                c3_values = [dispatcher.c3];
+             end 
+
+             total_counter=0;
+             for idx1=1:length(c1_values)
+                 for idx2=1:length(c2_values)
+                     for idx3=1:length(c3_values)
+                         % Initialize personal bests
+                         dispatcher.c1=c1_values(idx1);
+                         dispatcher.c2=c2_values(idx2);
+                         dispatcher.c3=c3_values(idx3);
+                         total_num_configurations=length(c1_values)*length(c2_values)*length(c3_values)*numRuns;
+
+                         for nRun = 1:numRuns
+                             fprintf(['\nRunning configurations: c1 trials=%d/%d, c2=%d/%d,c3=%d/%d, Run_Num=%d/%d counter/Total=%d/%d'], ...
+                                 idx1,length(c1_values),idx2,length(c2_values),idx3,length(c3_values),nRun,numRuns,total_counter,total_num_configurations);
+
+                             dispatcher.population = randi([1, dispatcher.maxLabel], dispatcher.nPop, dispatcher.nVar);
+                             % Initialize velocity matrices (probability matrices)
+                             % velocities(i, j, l) = probability that particle i, dimension j takes label l
+                             dispatcher.velocities = ones(dispatcher.nPop, dispatcher.nVar, dispatcher.maxLabel) ./ dispatcher.maxLabel;
+
+                             personalBestPositions = dispatcher.initializePopulation();
+                             personalBestCosts = objFun(dispatcher.population);
+                             % Initialize global best
+                             [globalBestCost, idx] = min(personalBestCosts);
+                             globalBestPosition = dispatcher.population(idx, :);
+                             % Best solution tracking
+                             bestSolution = globalBestPosition;
+                             bestCost = globalBestCost;
+
+                             % Main PSO loop
+                             for iter = 1:dispatcher.maxIter
+                                 % Update inertia weight linearly from w_start to w_end
+                                 dispatcher.w = dispatcher.w_start - (dispatcher.w_start - dispatcher.w_end) * (iter - 1) / (dispatcher.maxIter - 1);
+
+                                 % Update velocities (probability matrices)
+                                 dispatcher = updateVelocities(dispatcher, personalBestPositions, globalBestPosition);
+
+                                 % Generate new positions by sampling from probability distributions
+                                 newPositions = samplePositions(dispatcher);
+
+                                 % Evaluate new population
+                                 costs = objFun(newPositions);
+
+                                 % Update personal bests
+                                 improvedIdx = costs < personalBestCosts;
+                                 personalBestPositions(improvedIdx, :) = newPositions(improvedIdx, :);
+                                 personalBestCosts(improvedIdx) = costs(improvedIdx);
+
+                                 % Update global best
+                                 [minCost, idx] = min(costs);
+                                 if minCost < globalBestCost
+                                     globalBestCost = minCost;
+                                     globalBestPosition = newPositions(idx, :);
+                                 end
+
+                                 % Update best solution
+                                 if globalBestCost < bestCost
+                                     bestCost = globalBestCost;
+                                     bestSolution = globalBestPosition;
+                                 end
+
+                                 % Update population for next iteration
+                                 dispatcher.population = newPositions;
+                             end
+                             total_counter=total_counter+1;
+                         end
+                     end
+                 end
+             end
+
+
+           
+        end
+        
+        function dispatcher = updateVelocities(dispatcher, personalBestPositions, globalBestPosition)
+            % Update probability matrices for all particles
+            for i = 1:dispatcher.nPop
+                for j = 1:dispatcher.nVar
+                    for l = 1:dispatcher.maxLabel
+                        % Generate random numbers
+                        r1 = rand();
+                        r2 = rand();
+                        r3 = rand();
+                        
+                        % Kronecker delta functions
+                        delta_personal = (personalBestPositions(i, j) == l);
+                        delta_global = (globalBestPosition(j) == l);
+                        
+                        % Update velocity (probability) using the formula:
+                        % V_{i,j,l}^{t+1} = w * V_{i,j,l}^t + c1 * r1 * delta(p_{i,j}, l) + 
+                        %                   c2 * r2 * delta(g_j, l) + c3 * r3 * (1/L)
+                        dispatcher.velocities(i, j, l) = ...
+                            dispatcher.w * dispatcher.velocities(i, j, l) + ...
+                            dispatcher.c1 * r1 * delta_personal + ...
+                            dispatcher.c2 * r2 * delta_global + ...
+                            dispatcher.c3 * r3 * (1 / dispatcher.maxLabel);
+                    end
+                    
+                    % Normalize probabilities for dimension j of particle i
+                    dispatcher.velocities(i, j, :) = dispatcher.velocities(i, j, :) / sum(dispatcher.velocities(i, j, :));
+                end
+            end
+        end
+        
+        function newPositions = samplePositions(dispatcher)
+            % Sample new positions from categorical distributions
+            newPositions = zeros(dispatcher.nPop, dispatcher.nVar);
+            
+            for i = 1:dispatcher.nPop
+                for j = 1:dispatcher.nVar
+                    % Get probability distribution for particle i, dimension j
+                    probDist = squeeze(dispatcher.velocities(i, j, :));
+                    
+                    % Sample from categorical distribution
+                    newPositions(i, j) = sampleCategorical(probDist);
+                end
+            end
+        end
+        
+        function currentW = getCurrentInertiaWeight(dispatcher)
+            % Utility method to get current inertia weight (for debugging/monitoring)
+            currentW = dispatcher.w;
+        end
+    end
+end
+
+%% Helper function to sample from categorical distribution
+function sample = sampleCategorical(probabilities)
+    % Sample from categorical distribution given probabilities
+    cumProb = cumsum(probabilities);
+    r = rand();
+    sample = find(r <= cumProb, 1, 'first');
+    
+    % Ensure we have a valid sample
+    if isempty(sample)
+        sample = length(probabilities);
+    end
+end
+
+%% Example usage:
+% startData.w_start = 0.9;    % Starting inertia weight
+% startData.w_end = 0.4;      % Ending inertia weight
+% startData.c1 = 2.0;         % Cognitive component
+% startData.c2 = 2.0;         % Social component
+% startData.c3 = 0.1;         % Uniform exploration component
+% % ... other parameters like nPop, nVar, maxLabel, maxIter, etc.
+% 
+% pso = PSO2(startData);
+% [bestSol, bestCost] = pso.optimize(@yourObjectiveFunction);

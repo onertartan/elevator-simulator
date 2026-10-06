@@ -1,0 +1,36 @@
+\begin{table*}[t]
+\centering
+\small
+\caption{The 10 best and 5 worst configurations out of 1575, ranked by
+mean AWT over 100 runs. ``Hits'' counts the runs that reached the best
+known AWT of 17.41\,s. $p$ is a paired Wilcoxon signed-rank test against
+the rank-1 configuration, which the common random numbers make valid:
+run $r$ is the same seed in every row. This table reports the extremes
+of the ranking; it is not the recommendation, which is the block in
+Table~\ref{tab:recommended}.}
+\label{tab:best-worst}
+\begin{tabular}{rccllrrrrrr}
+\toprule
+Rank & $P_c$ & $P_m$ & Selection & Crossover & Mutation & Mean (s) & SD (s) & Min (s) & Hits & $p$\\
+\midrule
+1 & 0.3 & 0.2 & Tournament & Scattered & Frequency & 18.145 & 0.813 & 17.41 & 6 & --\\
+2 & 0.3 & 0.1 & Tournament & Scattered & Frequency & 18.170 & 0.898 & 17.41 & 12 & 0.746\\
+3 & 0.5 & 0.2 & Tournament & Scattered & Frequency & 18.189 & 0.929 & 17.41 & 3 & 0.573\\
+4 & 0.6 & 0.2 & Stochastic uniform & Scattered & Frequency & 18.194 & 0.953 & 17.41 & 9 & 0.630\\
+5 & 0.5 & 0.1 & Tournament & Scattered & Uniform & 18.202 & 0.977 & 17.41 & 8 & 0.640\\
+6 & 0.3 & 0.05 & Tournament & Scattered & Frequency & 18.204 & 0.860 & 17.41 & 11 & 0.771\\
+7 & 0.5 & 0.1 & Tournament & Scattered & Frequency & 18.214 & 0.959 & 17.41 & 13 & 0.711\\
+8 & 0.7 & 0.2 & Stochastic uniform & Scattered & Frequency & 18.225 & 1.009 & 17.41 & 11 & 0.531\\
+9 & 0.6 & 0.2 & Tournament & Scattered & Frequency & 18.229 & 0.940 & 17.41 & 6 & 0.291\\
+10 & 0.4 & 0.1 & Tournament & Scattered & Frequency & 18.231 & 0.984 & 17.41 & 11 & 0.871\\
+\addlinespace
+\multicolumn{11}{c}{$\vdots$}\\
+\addlinespace
+1571 & 0.3 & 0.01 & Stochastic uniform & Single point & Block & 29.851 & 3.868 & 20.12 & 0 & $<$0.001\\
+1572 & 0.3 & 0.01 & Tournament & Single point & Block & 29.874 & 3.705 & 21.12 & 0 & $<$0.001\\
+1573 & 0.3 & 0.01 & Roulette wheel & Two point & Block & 30.133 & 4.093 & 20.71 & 0 & $<$0.001\\
+1574 & 0.3 & 0.01 & Stochastic uniform & Two point & Block & 30.154 & 4.136 & 19.94 & 0 & $<$0.001\\
+1575 & 0.3 & 0.01 & Roulette wheel & Single point & Block & 30.975 & 4.069 & 20.76 & 0 & $<$0.001\\
+\bottomrule
+\end{tabular}
+\end{table*}
