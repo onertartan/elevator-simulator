@@ -455,3 +455,47 @@ These checks use small fixtures and temporary outputs. The default 1000-restart
 measurement-loop test mocks the HC run; it does not perform a large calibration.
 No large experiment or difficulty-band calibration was run for this change.
 The pre-existing renderer-test issue recorded in section 7 was not addressed.
+
+## 10. Direction during the pre-boarding window ([A5], 2026-10-18)
+
+`Car.updateState()` now counts the destinations of the passengers already
+selected for boarding (`pendingBoard`) as cabin destinations when it derives
+the movement state. Car.m boarded at arrival, so the original `updateState`
+saw the new DF in the arrival tick. Phased boarding ([A4], section 1 of
+PROJECT_STATUS.md) answers the hall call at arrival but defers DF/load to the
+door-open moment (arrival + doorOpeningTime). In between, the car had neither
+an assigned hall call nor a DF, and `updateState` dropped it to `state=0`.
+A decision falling inside that window (every `arrivalRate` tick with the
+default "dispatch when new call registered" setting) derived the direction
+from the other assigned calls alone.
+
+Observed on the unpatched engine (doors 2+3+2, Ts=1, car arrives at 5 for a
+5 -> 6 passenger at t=5, pickup t=6, boarding t=8, departure t=13):
+
+| Decision at t=7 assigns to the same car | Before | After |
+| --- | --- | --- |
+| down call 3 -> 1 | `state` -1 at once; after boarding the "-1" branch keeps it (call below): the car leaves **downwards** with the 5 -> 6 passenger, serves 3, then climbs to 6 | `state` stays +1; 6 first, then -1 for 3 |
+| down call 5 -> 2 (same floor) | `isAtHC`'s state-0 term fires: `beginPickup` restarts the counter, both passengers board, the 5 -> 2 passenger rides 5 -> 6 -> 2, departure one tick later | call not taken in this stop; served on the way back (state -1 after 6) |
+| up call 5 -> 7 (same floor) | joins the stop (counter restart, both board) | unchanged |
+
+Movement is not affected: `Controller.operate` never moves a car while
+`stopOverCounter != 0`, whatever its state, so a +1/-1 state during a door
+cycle only decides where the car goes once the counter reaches 0 (this was
+already the case for loaded cars and for drop-offs with calls ahead).
+
+Scope: a decision is not even needed. The per-tick state update at the end
+of the pickup tick already consulted the car's *other* assigned calls: with
+no call ahead and one behind, the unpatched car reversed before the
+accepted passengers had boarded. One decision at t=0, idle car at 4.0
+assigned both 5 -> 6 and 2 -> 1: before, it picked up at 5, turned, served 2
+and delivered the first passenger at t=32; after, it delivers at t=13 and
+serves 2 on the way down. Any one-shot assignment that gives an idle car
+calls on both sides (nearest-car, GA and exact all do) executes differently
+in the simulator; the static objective values (objFunDestination, exact DP,
+GA fitness) are unchanged, since they already model a car continuing in the
+boarding passengers' direction. `analysis/headless_benchmark.py` prints the
+simulated metrics on both revisions; the pull request that introduced [A5]
+records the observed differences.
+
+Regression tests: `tests/test_pending_board_direction.py` (5 tests; three of
+them fail on the unpatched engine, two pin the unchanged behaviours).

@@ -403,9 +403,27 @@ class Car:
         Update movement state based on current destinations and assigned calls.
         updateType: 'flexible' or 'fixed'
         #  priority upwards (!!! needs to be checked in the future)
+
+        [A5] The destinations of the passengers already selected for
+        boarding (pendingBoard) count as cabin destinations here. Car.m
+        boarded at arrival, so its updateState saw the new DF in the same
+        tick; phased boarding [A4] defers DF/load to the door-open moment
+        (arrival + doorOpeningTime), which opened a window in which the
+        car has neither an assigned hall call (served at arrival) nor a
+        DF. The per-tick update at the end of the pickup tick, or a
+        decision inside that window, then derived the direction from the
+        other assigned calls alone: with no call ahead and one behind, a
+        car that had just accepted an up-passenger reversed before they
+        boarded (they rode away from their destination), and a decision
+        could make it take a same-floor opposite-direction call into the
+        same stop (isAtHC's state-0 term; counter restart). Counting the
+        pendingBoard destinations restores what Car.m saw. Movement is
+        unaffected: Controller.operate never moves a car while
+        stopOverCounter != 0, whatever its state.
         """
-        max_dest_floor = max(self.DF, default=self.floor)
-        min_dest_floor = min(self.DF, default=self.floor)
+        dests = self.DF | {entry["p"].DF for entry in self.pendingBoard}   # [A5]
+        max_dest_floor = max(dests, default=self.floor)
+        min_dest_floor = min(dests, default=self.floor)
 
         has_dest_floor_above = max_dest_floor > self.floor
         has_dest_floor_below = min_dest_floor < self.floor
