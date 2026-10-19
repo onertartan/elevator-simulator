@@ -1,0 +1,5 @@
+light_o0 baselines {"random_full": {"WT": 7.96, "JT": 20.75, "delivered": 1.0, "wrong_way": 0.026, "reassign": 0.52, "empty_stops": 1.12}, "scan": {"WT": 7.04, "JT": 19.26, "delivered": 1.0, "wrong_way": 0.014, "reassign": 0.0, "empty_stops": 0.0}, "nearest": {"WT": 5.87, "JT": 19.23, "delivered": 1.0, "wrong_way": 0.015, "reassign": 0.0, "empty_stops": 0.0}, "pickup_first": {"WT": 4.77, "JT": 19.83, "delivered": 1.0, "wrong_way": 0.027, "reassign": 0.0, "empty_stops": 0.0}}
+light_o0 {"WT": 5.57, "JT": 18.23, "delivered": 1.0, "wrong_way": 0.023, "reassign": 0.16, "empty_stops": 0.1, "steps": 50000, "minutes": 2.2}
+light_o0 {"WT": 4.94, "JT": 17.92, "delivered": 1.0, "wrong_way": 0.02, "reassign": 0.08, "empty_stops": 0.07, "steps": 100000, "minutes": 4.3}
+light_o0 {"WT": 4.45, "JT": 17.69, "delivered": 1.0, "wrong_way": 0.021, "reassign": 0.05, "empty_stops": 0.05, "steps": 150000, "minutes": 6.5}
+light_o0 {"WT": 4.47, "JT": 18.16, "delivered": 1.0, "wrong_way": 0.025, "reassign": 0.07, "empty_stops": 0.1, "steps": 200000, "minutes": 8.7}

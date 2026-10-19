@@ -1,0 +1,127 @@
+{
+ "config": {
+  "F": 4,
+  "C": 2,
+  "lam": 0.05,
+  "t_gen": 600,
+  "t_cap": 2400,
+  "w_ride": 0.0,
+  "total": 400000
+ },
+ "baselines": {
+  "random_full": {
+   "WT": 7.96,
+   "JT": 20.75,
+   "delivered": 1.0,
+   "wrong_way": 0.026,
+   "reassign": 0.52,
+   "empty_stops": 1.12
+  },
+  "scan": {
+   "WT": 7.04,
+   "JT": 19.26,
+   "delivered": 1.0,
+   "wrong_way": 0.014,
+   "reassign": 0.0,
+   "empty_stops": 0.0
+  },
+  "nearest": {
+   "WT": 5.87,
+   "JT": 19.23,
+   "delivered": 1.0,
+   "wrong_way": 0.015,
+   "reassign": 0.0,
+   "empty_stops": 0.0
+  },
+  "pickup_first": {
+   "WT": 4.77,
+   "JT": 19.83,
+   "delivered": 1.0,
+   "wrong_way": 0.027,
+   "reassign": 0.0,
+   "empty_stops": 0.0
+  }
+ },
+ "curve": [
+  {
+   "WT": 5.11,
+   "JT": 18.06,
+   "delivered": 1.0,
+   "wrong_way": 0.017,
+   "reassign": 0.11,
+   "empty_stops": 0.15,
+   "steps": 50000,
+   "minutes": 1.3
+  },
+  {
+   "WT": 4.59,
+   "JT": 18.22,
+   "delivered": 1.0,
+   "wrong_way": 0.022,
+   "reassign": 0.04,
+   "empty_stops": 0.0,
+   "steps": 100000,
+   "minutes": 2.6
+  },
+  {
+   "WT": 4.45,
+   "JT": 17.77,
+   "delivered": 1.0,
+   "wrong_way": 0.02,
+   "reassign": 0.04,
+   "empty_stops": 0.05,
+   "steps": 150000,
+   "minutes": 3.8
+  },
+  {
+   "WT": 4.34,
+   "JT": 17.54,
+   "delivered": 1.0,
+   "wrong_way": 0.019,
+   "reassign": 0.04,
+   "empty_stops": 0.0,
+   "steps": 200000,
+   "minutes": 5.1
+  },
+  {
+   "WT": 4.34,
+   "JT": 17.74,
+   "delivered": 1.0,
+   "wrong_way": 0.021,
+   "reassign": 0.04,
+   "empty_stops": 0.03,
+   "steps": 250000,
+   "minutes": 6.4
+  },
+  {
+   "WT": 4.36,
+   "JT": 17.7,
+   "delivered": 1.0,
+   "wrong_way": 0.018,
+   "reassign": 0.04,
+   "empty_stops": 0.0,
+   "steps": 300000,
+   "minutes": 7.7
+  },
+  {
+   "WT": 4.25,
+   "JT": 17.66,
+   "delivered": 1.0,
+   "wrong_way": 0.022,
+   "reassign": 0.05,
+   "empty_stops": 0.03,
+   "steps": 350000,
+   "minutes": 8.9
+  },
+  {
+   "WT": 4.29,
+   "JT": 17.58,
+   "delivered": 1.0,
+   "wrong_way": 0.021,
+   "reassign": 0.04,
+   "empty_stops": 0.03,
+   "steps": 400000,
+   "minutes": 10.2
+  }
+ ]
+}

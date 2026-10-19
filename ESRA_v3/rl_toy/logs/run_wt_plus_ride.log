@@ -1,0 +1,9 @@
+wt_plus_ride baselines {"random_full": {"WT": 7.96, "JT": 20.75, "delivered": 1.0, "wrong_way": 0.026, "reassign": 0.52, "empty_stops": 1.12}, "scan": {"WT": 7.04, "JT": 19.26, "delivered": 1.0, "wrong_way": 0.014, "reassign": 0.0, "empty_stops": 0.0}, "nearest": {"WT": 5.87, "JT": 19.23, "delivered": 1.0, "wrong_way": 0.015, "reassign": 0.0, "empty_stops": 0.0}, "pickup_first": {"WT": 4.77, "JT": 19.83, "delivered": 1.0, "wrong_way": 0.027, "reassign": 0.0, "empty_stops": 0.0}}
+wt_plus_ride {"WT": 7.49, "JT": 19.47, "delivered": 1.0, "wrong_way": 0.015, "reassign": 0.09, "empty_stops": 0.03, "steps": 50000, "minutes": 1.3}
+wt_plus_ride {"WT": 6.38, "JT": 18.16, "delivered": 1.0, "wrong_way": 0.013, "reassign": 0.16, "empty_stops": 0.12, "steps": 100000, "minutes": 2.6}
+wt_plus_ride {"WT": 6.0, "JT": 17.4, "delivered": 1.0, "wrong_way": 0.009, "reassign": 0.17, "empty_stops": 0.28, "steps": 150000, "minutes": 3.9}
+wt_plus_ride {"WT": 5.78, "JT": 17.18, "delivered": 1.0, "wrong_way": 0.01, "reassign": 0.15, "empty_stops": 0.2, "steps": 200000, "minutes": 5.2}
+wt_plus_ride {"WT": 5.51, "JT": 16.95, "delivered": 1.0, "wrong_way": 0.009, "reassign": 0.15, "empty_stops": 0.03, "steps": 250000, "minutes": 6.5}
+wt_plus_ride {"WT": 5.32, "JT": 16.62, "delivered": 1.0, "wrong_way": 0.007, "reassign": 0.15, "empty_stops": 0.1, "steps": 300000, "minutes": 7.7}
+wt_plus_ride {"WT": 5.41, "JT": 16.84, "delivered": 1.0, "wrong_way": 0.01, "reassign": 0.13, "empty_stops": 0.17, "steps": 350000, "minutes": 9.0}
+wt_plus_ride {"WT": 5.38, "JT": 16.57, "delivered": 1.0, "wrong_way": 0.007, "reassign": 0.13, "empty_stops": 0.17, "steps": 400000, "minutes": 10.2}

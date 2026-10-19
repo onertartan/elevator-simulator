@@ -1,0 +1,88 @@
+{
+ "config": {
+  "F": 4,
+  "C": 2,
+  "lam": 0.2,
+  "t_gen": 600,
+  "t_cap": 2400,
+  "w_ride": 0.0,
+  "show_prev_assign": false,
+  "total": 200000
+ },
+ "baselines": {
+  "random_full": {
+   "WT": 22.0,
+   "JT": 47.01,
+   "delivered": 1.0,
+   "wrong_way": 0.085,
+   "reassign": 3.36,
+   "empty_stops": 4.4
+  },
+  "scan": {
+   "WT": 14.94,
+   "JT": 33.36,
+   "delivered": 1.0,
+   "wrong_way": 0.031,
+   "reassign": 0.0,
+   "empty_stops": 0.0
+  },
+  "nearest": {
+   "WT": 17.27,
+   "JT": 45.56,
+   "delivered": 1.0,
+   "wrong_way": 0.043,
+   "reassign": 0.0,
+   "empty_stops": 0.0
+  },
+  "pickup_first": {
+   "WT": 8.92,
+   "JT": 38.82,
+   "delivered": 1.0,
+   "wrong_way": 0.048,
+   "reassign": 0.0,
+   "empty_stops": 0.0
+  }
+ },
+ "curve": [
+  {
+   "WT": 14.24,
+   "JT": 57.58,
+   "delivered": 1.0,
+   "wrong_way": 0.081,
+   "reassign": 0.59,
+   "empty_stops": 1.07,
+   "steps": 50000,
+   "minutes": 2.8
+  },
+  {
+   "WT": 9.6,
+   "JT": 64.85,
+   "delivered": 1.0,
+   "wrong_way": 0.091,
+   "reassign": 0.34,
+   "empty_stops": 0.42,
+   "steps": 100000,
+   "minutes": 5.6
+  },
+  {
+   "WT": 8.89,
+   "JT": 56.94,
+   "delivered": 1.0,
+   "wrong_way": 0.085,
+   "reassign": 0.38,
+   "empty_stops": 0.7,
+   "steps": 150000,
+   "minutes": 8.3
+  },
+  {
+   "WT": 8.07,
+   "JT": 49.59,
+   "delivered": 1.0,
+   "wrong_way": 0.077,
+   "reassign": 0.31,
+   "empty_stops": 0.38,
+   "steps": 200000,
+   "minutes": 11.0
+  }
+ ]
+}

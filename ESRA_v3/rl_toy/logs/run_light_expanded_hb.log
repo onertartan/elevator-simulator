@@ -1,0 +1,5 @@
+light_expanded_hb baselines {"random_full": {"WT": 7.96, "JT": 20.75, "delivered": 1.0, "wrong_way": 0.026, "reassign": 0.52, "empty_stops": 1.12}, "scan": {"WT": 7.04, "JT": 19.26, "delivered": 1.0, "wrong_way": 0.014, "reassign": 0.0, "empty_stops": 0.0}, "nearest": {"WT": 5.87, "JT": 19.23, "delivered": 1.0, "wrong_way": 0.015, "reassign": 0.0, "empty_stops": 0.0}, "pickup_first": {"WT": 4.77, "JT": 19.83, "delivered": 1.0, "wrong_way": 0.027, "reassign": 0.0, "empty_stops": 0.0}}
+light_expanded_hb {"WT": 5.63, "JT": 20.66, "delivered": 1.0, "wrong_way": 0.038, "reassign": 0.23, "empty_stops": 0.68, "steps": 50000, "minutes": 4.6}
+light_expanded_hb {"WT": 4.9, "JT": 19.35, "delivered": 1.0, "wrong_way": 0.032, "reassign": 0.13, "empty_stops": 0.38, "steps": 100000, "minutes": 9.6}
+light_expanded_hb {"WT": 4.54, "JT": 19.23, "delivered": 1.0, "wrong_way": 0.034, "reassign": 0.1, "empty_stops": 0.05, "steps": 150000, "minutes": 14.6}
+light_expanded_hb {"WT": 4.45, "JT": 18.72, "delivered": 1.0, "wrong_way": 0.03, "reassign": 0.08, "empty_stops": 0.12, "steps": 200000, "minutes": 19.3}
