@@ -94,11 +94,12 @@ def test_full_run(tmpdir="."):
     assert car1.floor == 4.0 and car1.state == 0 and not car1.DF
     assert car1.tripTime == 6.0, "2 moves to pickup + 4 moves to floor 4"
     p = rec.P.served[1][0]
-    assert (p.BT, p.DAT, p.TrT) == (4, 15, 11), \
-        "board/alight both shift by doorOpeningTime=2, transit unchanged"
+    assert (p.BT, p.DAT, p.TrT) == (4, 13, 11), \
+        "[A7] DAT = destination opening start (alight event 15 - 2); TrT unchanged"
     assert (p.WT, p.WT_board, p.doorOpeningStartTime) == (2, 4, 2)
-    assert p.TTD == p.WT_board + p.TrT == 15
+    assert p.TTD == p.WT + p.TrT == 13
     assert rec.waiting_time_endpoint == "pickup_door_opening_start"
+    assert rec.transit_time_endpoint == "destination_door_opening_start"
     assert rec.HC.served[1][0].WT == 2.0, \
         "hall call is answered at car arrival (t=2), before the doors open [A4]"
 
@@ -213,7 +214,7 @@ def test_recorded_roundtrip():
     assert exp2.Pawt[0, 0, 0, 0] == 2.0, \
         "replay must reproduce the recorded waiting time exactly"
     replayed = exp2.dataConf.RECnew[recKey(1, 1, 1, 1, 1)].P.served[1][0]
-    assert (replayed.WT, replayed.WT_board, replayed.BT, replayed.DAT) == (2, 4, 4, 15)
+    assert (replayed.WT, replayed.WT_board, replayed.BT, replayed.DAT) == (2, 4, 4, 13)
     os.remove(exp2.resultsFile)
 
     os.remove(pkl)

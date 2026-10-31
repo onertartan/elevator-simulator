@@ -297,6 +297,8 @@ timing, and animations are unchanged. Passengers still become `travelling`
 at fully-open doors (transfer-animation start), not at opening start or at
 transfer end. Consequently `TTD = WT_board + TrT`; it is not generally
 `WT + TrT`. Destination-arrival timing has not been redefined.
+(Superseded by [A7], section 12: `DAT` and `TrT` now use the ISO 8100-32
+endpoints as well, and `TTD = WT + TrT` holds exactly.)
 
 The GUI reports both waiting measures. Results Excel files keep the original
 passenger/HC tables in their original positions and append an
@@ -548,3 +550,41 @@ legacy write path trips the `beginPickup` safety net; periodic traffic
 seeds 1-20 report `dup = 0` and `unserved = 0`.
 `python analysis/headless_benchmark.py --strict` exits 1 if any row reports
 `dup > 0` or `unserved > 0`.
+
+## 12. Transit time and time to destination on ISO endpoints ([A7], 2026-10-31)
+
+Section 7 aligned the primary waiting time with ISO 8100-32 (3.40) but left
+`DAT`, `TrT` and `TTD` on the animation events (doors fully open), so the
+three metrics mixed two endpoint systems and `TTD = WT_board + TrT`, not
+`WT + TrT`. [A7] moves the remaining two to the standard:
+
+| Metric | ISO 8100-32 | Start | End |
+| --- | --- | --- | --- |
+| `WT` | 3.40 waiting time | queue join (QJT) | accepting car begins to open its doors at the boarding floor |
+| `TrT` | 3.35 transit time | that opening start - or QJT, if the passenger joined while the doors were opening/open (3.35 NOTE) | doors begin to open at the destination floor |
+| `TTD` | 3.33 time to destination | QJT | doors begin to open at the destination floor |
+
+`Passenger.alight(current_time, destination_opening_start)` now records
+`DAT` as the opening start of the drop-off cycle (`Car.doorOpeningStartTime`,
+passed by `Car.updateDoorCycle`), `TrT = DAT - max(QJT, doorOpeningStartTime)`
+and `TTD = DAT - QJT`. Hence `TTD = WT + TrT` exactly, for every passenger,
+including those who joined during opening (both WT and the max() term see
+QJT). Records carry `transit_time_endpoint = "destination_door_opening_start"`
+next to `waiting_time_endpoint`.
+
+What changes numerically: `DAT` and `TTD` are shorter by the destination
+door-opening time (2 s with the default physics; less if that cycle was
+already opening); `TrT` durations are unchanged except for passengers who
+joined an opening/open pickup, whose transit no longer includes the part of
+the opening that preceded their arrival. The physical alighting (list
+transfers, load, animation) still happens at fully-open doors; `BT` and
+`WT_board` are untouched. Cabin passengers loaded from an initials file
+(`QJT = BT = -1`, no pickup opening) fall back to `TrT = DAT - BT`;
+`alight()` called without an opening start (older call sites, tests) keeps
+`DAT = current_time`.
+
+Updated expectations: `tests/test_passenger_waiting_time.py`,
+`tests/test_experiment_smoke.py` (DAT 15 -> 13, TTD = WT + TrT), the Excel
+"Metric definitions" sheet. `analysis/headless_benchmark.py` TTD/last_DAT
+columns drop by 2 s relative to the [A6] output; WT, WT_board and TrT rows
+are identical.

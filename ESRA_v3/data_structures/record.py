@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
-from .passenger import WAITING_TIME_ENDPOINT
+from .passenger import WAITING_TIME_ENDPOINT, TRANSIT_TIME_ENDPOINT
 
 
 """
@@ -20,6 +20,7 @@ dataConf.RECnew[recKey(...)] by Simulator.recordData:
 class Record:
     def __init__(self, HC, P, cars):
         self.waiting_time_endpoint = WAITING_TIME_ENDPOINT
+        self.transit_time_endpoint = TRANSIT_TIME_ENDPOINT   # [A7]
         self.HC = HC
         self.P = P
         self.cars = cars

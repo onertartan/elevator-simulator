@@ -27,7 +27,8 @@ duplicate served entries (`dup` > 0 means a passenger was boarded by two cars
 exits 1 if any row reports dup > 0 or unserved > 0),
 unserved count, mean primary WT (pickup door-opening start), mean WT_board,
 mean transit time, mean time-to-destination, and the last destination
-arrival time.
+arrival time (DAT/TrT/TTD on ISO 8100-32 endpoints since [A7], RUNNING.md
+section 12: DAT = destination door-opening start, TTD = WT + TrT).
 Physics: ga_sweep_config.CAR_PARAMS (doors 2+3+2, capacity 10, 0.5 floor/s).
 """
 from __future__ import annotations

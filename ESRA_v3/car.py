@@ -290,7 +290,8 @@ class Car:
         # sprites start walking towards the landing platform.
         if self.pendingAlight and self.stopOverCounter <= doorsOpenAt + eps:
             for passenger in self.pendingAlight:
-                passenger.alight(currentTime)
+                # [A7] DAT = opening start of this drop-off cycle (ISO 8100-32)
+                passenger.alight(currentTime, self.doorOpeningStartTime)
                 P.transfer(passenger, "served")
                 self.P.transfer(passenger, "served")
                 self.load -= 1
