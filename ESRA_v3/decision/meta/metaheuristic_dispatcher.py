@@ -173,8 +173,5 @@ class MetaheuristicDispatcher(Dispatcher):
         of the floor-sorted waiting list — replaces MATLAB's
         `assignedCars(upindex)=assignedCars` scatter."""
         for label, hall_call in zip(labels, HC.waiting[dir_]):
-            car_id = cars[label - 1].id                  # [P15]
-            hall_call.carId = car_id
-            for passenger in P.waiting[dir_]:
-                if passenger.floor == hall_call.floor:
-                    passenger.carId = car_id
+            # [A6]: passengers already accepted by a car keep that car
+            self.assign_call(hall_call, dir_, cars[label - 1].id, P)   # [P15]

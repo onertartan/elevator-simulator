@@ -23,7 +23,8 @@ Rows:
 
 Metrics are taken from the recorded run: served passengers (unique ids),
 duplicate served entries (`dup` > 0 means a passenger was boarded by two cars
-- a pre-existing [A4] race, see the pull request that added this script),
+- the [A4] pre-boarding race fixed by [A6], RUNNING.md section 11; `--strict`
+exits 1 if any row reports dup > 0 or unserved > 0),
 unserved count, mean primary WT (pickup door-opening start), mean WT_board,
 mean transit time, mean time-to-destination, and the last destination
 arrival time.
@@ -140,7 +141,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick", action="store_true", help="snapshot scenarios only")
     ap.add_argument("--seeds", type=int, default=5, help="traffic seeds (default 5)")
+    ap.add_argument("--strict", action="store_true",
+                    help="exit 1 if any row has dup > 0 or unserved > 0 ([A6] invariant)")
     args = ap.parse_args()
+    violations = []
 
     cols = ["served", "dup", "unserved", "WT", "WT_board", "TrT", "TTD", "last_DAT"]
     print(f"{'run':52s} " + " ".join(f"{c:>9s}" for c in cols))
@@ -149,6 +153,8 @@ def main():
         print(f"{label:52s} " + " ".join(
             f"{m[c]:9d}" if isinstance(m[c], int) else f"{m[c]:9.3f}" for c in cols))
         sys.stdout.flush()
+        if m["dup"] or m["unserved"]:
+            violations.append(label.strip())
 
     for wb in sorted(glob.glob(os.path.join(ROOT, "initials_files", "*.xlsx"))):
         name = os.path.basename(wb).replace("initials_file_", "").replace(".xlsx", "")
@@ -159,12 +165,14 @@ def main():
             row(f"{name:8s} GA(2026) period=1", snapshot_run(wb, ga(), 1))
         except ValueError as exc:           # objFunDestination refuses pending-boarding snapshots
             print(f"{name:8s} GA(2026) period=1".ljust(52) + f" rejected: {exc}")
-    if args.quick:
-        return
-    for seed in range(1, args.seeds + 1):
-        row(f"traffic nf8 nc3 rate5 600s seed={seed} nearest", traffic_run(seed))
-        row(f"traffic nf8 nc3 rate5 600s seed={seed} nearest period=1",
-            traffic_run(seed, decision_period=1))
+    if not args.quick:
+        for seed in range(1, args.seeds + 1):
+            row(f"traffic nf8 nc3 rate5 600s seed={seed} nearest", traffic_run(seed))
+            row(f"traffic nf8 nc3 rate5 600s seed={seed} nearest period=1",
+                traffic_run(seed, decision_period=1))
+    if args.strict and violations:
+        print("STRICT: dup/unserved in " + ", ".join(violations), file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

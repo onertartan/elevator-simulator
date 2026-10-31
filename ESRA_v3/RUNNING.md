@@ -499,3 +499,52 @@ records the observed differences.
 
 Regression tests: `tests/test_pending_board_direction.py` (5 tests; three of
 them fail on the unpatched engine, two pin the unchanged behaviours).
+
+## 11. Accepted passengers are never reassigned ([A6], 2026-10-31)
+
+`Dispatcher.assign_call(hall_call, dir_, car_id, P)` is now the single
+place that writes `carId` to a hall call and to the waiting passengers it
+covers. Passengers whose pickup has already started (`doorOpeningStartTime`
+set: they sit in the accepting car's `pendingBoard` while its doors open,
+[A4]) keep their accepting car; the helper returns how many it skipped.
+`NearestCarDispatcher` and `MetaheuristicDispatcher._assignDirection` call
+it; a dispatcher that writes `carId` directly bypasses the rule.
+
+The race. `beginPickup` answers the hall call at arrival (counter 7) but the
+accepted passengers stay in `P.waiting` until the doors are open (counter 5,
+section 7). A new call registered at the same floor and direction inside
+that window is a fresh `HallCall`; before [A6] every dispatcher rewrote
+`carId` for all waiting passengers at that floor, accepted ones included.
+When the second car arrived (or was already standing there), its
+`beginPickup` accepted them as well: both cars boarded and delivered them,
+and `P.served` carried duplicate rows (`dup` column of
+`analysis/headless_benchmark.py`). The nearest-car tie-break makes this
+easy to hit: equal FS and equal distance are resolved by the smaller
+`stopOverCounter`, so a car with a closed door cycle at the same floor beats
+the car whose doors are opening. First observed as `dup = 1` for traffic
+seed 1 on main (before [A5]); on the [A5] engine the same race shows as
+`dup = 2` for seed 17 (two cars at floor 7 going down, t = 400) and `dup = 1`
+for seed 20 with `decisionPeriod = 1`.
+
+Safety net: `Car.beginPickup` raises `RuntimeError` when a waiting
+passenger assigned to the car already has `doorOpeningStartTime` set but is
+not in the car's own `pendingBoard` - i.e. a dispatcher handed it an
+accepted passenger. With `assign_call` this cannot happen; the check turns
+a silent double boarding by a new (e.g. RL) dispatcher into an error.
+
+What is unchanged: waiting-time endpoints, boarding/alighting timing,
+`WT_board` counting while the passenger remains in the waiting lists, the
+GA/exact snapshot checks (objFunDestination and the exact dispatcher still
+reject snapshots taken during pending boarding - that is a separate issue,
+see `CIFT_BINIS_GA_REDDI_VE_ESIT_UZAKLIK_NOTU_2026-10-31.md`), and every
+assignment in which no accepted passenger is involved. Over the 20-seed
+benchmark only the three rows that reported a duplicate change; every other
+row is identical before and after.
+
+Regression tests: `tests/test_accepted_passenger_reassignment.py` (4 tests,
+all fail on the pre-[A6] engine): the helper leaves accepted passengers
+alone; the two-car reproduction boards each passenger exactly once; the
+legacy write path trips the `beginPickup` safety net; periodic traffic
+seeds 1-20 report `dup = 0` and `unserved = 0`.
+`python analysis/headless_benchmark.py --strict` exits 1 if any row reports
+`dup > 0` or `unserved > 0`.

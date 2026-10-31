@@ -383,6 +383,19 @@ class Car:
         pending_here = [e["p"] for e in self.pendingBoard]
         passengers_here = [p for p in self.P.waiting[dir_]
                            if p.floor == self.floor and p not in pending_here]
+        # [A6] safety net: a waiting passenger whose pickup has already
+        # started (doorOpeningStartTime set) and who is not in THIS car's
+        # pendingBoard was accepted by another car. Dispatcher.assign_call
+        # never hands such a passenger to a second car; reaching this
+        # point means a dispatcher wrote carId directly. Fail loudly
+        # instead of boarding the passenger twice.
+        foreign = [p for p in passengers_here if p.doorOpeningStartTime is not None]
+        if foreign:
+            raise RuntimeError(
+                f"car {self.id} at floor {self.floor}: passenger(s) "
+                f"{[p.id for p in foreign]} were already accepted by another "
+                f"car's pickup; the dispatcher must not reassign accepted "
+                f"passengers (use Dispatcher.assign_call) [A6]")
         # [A2] capacity credit for passengers about to alight at THIS
         # floor, debit for boarders already selected in this stop-over
         available_space = (self.capacity - self.load
