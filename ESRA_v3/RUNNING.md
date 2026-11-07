@@ -588,3 +588,33 @@ Updated expectations: `tests/test_passenger_waiting_time.py`,
 "Metric definitions" sheet. `analysis/headless_benchmark.py` TTD/last_DAT
 columns drop by 2 s relative to the [A6] output; WT, WT_board and TrT rows
 are identical.
+
+## 13. RL environment design documents (2026-11-07)
+
+The design contract for the reinforcement-learning environment that will be
+built on this engine lives in `ESRA_v3/docs/`:
+
+- `RL_ORTAMI_TASARIM_DEVIR_v3.2.md` - the full design handover document
+  (Turkish): SMDP decision epochs, two-phase decision step (K13), observation
+  and action spaces, reward, control modes, decision table K1-K25.
+- `RL_TASARIM_EK_K24_2026-10-31.md` - addendum K24: an OD group a car has
+  accepted (door opening started, [A6]) is locked to that car in the phase-0
+  mask.
+
+Two engine facts recorded in v3.2 (section 3.1 and 3.5, decision K25) matter
+for anyone touching the loop in `experiment.py` / `controller.py`:
+
+- The engine is a **fixed-increment** (time-stepped, `Ts = 1 s`) simulation
+  of a discrete-event system, not a next-event simulator: `Controller.operate`
+  advances `time += Ts` and every tick re-evaluates every car. Randomness
+  enters only through passenger generation (origin-destination drawn from the
+  route-probability matrix); arrivals are periodic (`arrivalRate` is a period,
+  not a Poisson rate).
+- A headless **next-event** advance mode is planned for RL training and batch
+  evaluation (GUI off): jump to the earliest of the per-car events (arrival at
+  the next stop floor, counter transitions 7->5->2->0) and system events (next
+  passenger arrival, GA decision period), update positions in closed form, then
+  process that instant in the same order the tick loop uses. It must reproduce
+  the tick loop's trajectory exactly; the acceptance test is
+  `analysis/headless_benchmark.py --event-mode` matching the tick-mode output
+  on all 20 seeds. Not implemented yet.
