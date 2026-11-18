@@ -290,7 +290,8 @@ class Car:
         # sprites start walking towards the landing platform.
         if self.pendingAlight and self.stopOverCounter <= doorsOpenAt + eps:
             for passenger in self.pendingAlight:
-                passenger.alight(currentTime)
+                # [A7] DAT = opening start of this drop-off cycle (ISO 8100-32)
+                passenger.alight(currentTime, self.doorOpeningStartTime)
                 P.transfer(passenger, "served")
                 self.P.transfer(passenger, "served")
                 self.load -= 1
@@ -383,6 +384,19 @@ class Car:
         pending_here = [e["p"] for e in self.pendingBoard]
         passengers_here = [p for p in self.P.waiting[dir_]
                            if p.floor == self.floor and p not in pending_here]
+        # [A6] safety net: a waiting passenger whose pickup has already
+        # started (doorOpeningStartTime set) and who is not in THIS car's
+        # pendingBoard was accepted by another car. Dispatcher.assign_call
+        # never hands such a passenger to a second car; reaching this
+        # point means a dispatcher wrote carId directly. Fail loudly
+        # instead of boarding the passenger twice.
+        foreign = [p for p in passengers_here if p.doorOpeningStartTime is not None]
+        if foreign:
+            raise RuntimeError(
+                f"car {self.id} at floor {self.floor}: passenger(s) "
+                f"{[p.id for p in foreign]} were already accepted by another "
+                f"car's pickup; the dispatcher must not reassign accepted "
+                f"passengers (use Dispatcher.assign_call) [A6]")
         # [A2] capacity credit for passengers about to alight at THIS
         # floor, debit for boarders already selected in this stop-over
         available_space = (self.capacity - self.load
@@ -403,9 +417,27 @@ class Car:
         Update movement state based on current destinations and assigned calls.
         updateType: 'flexible' or 'fixed'
         #  priority upwards (!!! needs to be checked in the future)
+
+        [A5] The destinations of the passengers already selected for
+        boarding (pendingBoard) count as cabin destinations here. Car.m
+        boarded at arrival, so its updateState saw the new DF in the same
+        tick; phased boarding [A4] defers DF/load to the door-open moment
+        (arrival + doorOpeningTime), which opened a window in which the
+        car has neither an assigned hall call (served at arrival) nor a
+        DF. The per-tick update at the end of the pickup tick, or a
+        decision inside that window, then derived the direction from the
+        other assigned calls alone: with no call ahead and one behind, a
+        car that had just accepted an up-passenger reversed before they
+        boarded (they rode away from their destination), and a decision
+        could make it take a same-floor opposite-direction call into the
+        same stop (isAtHC's state-0 term; counter restart). Counting the
+        pendingBoard destinations restores what Car.m saw. Movement is
+        unaffected: Controller.operate never moves a car while
+        stopOverCounter != 0, whatever its state.
         """
-        max_dest_floor = max(self.DF, default=self.floor)
-        min_dest_floor = min(self.DF, default=self.floor)
+        dests = self.DF | {entry["p"].DF for entry in self.pendingBoard}   # [A5]
+        max_dest_floor = max(dests, default=self.floor)
+        min_dest_floor = min(dests, default=self.floor)
 
         has_dest_floor_above = max_dest_floor > self.floor
         has_dest_floor_below = min_dest_floor < self.floor

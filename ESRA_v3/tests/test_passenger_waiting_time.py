@@ -75,9 +75,9 @@ class PassengerWaitingTimeTests(unittest.TestCase):
         self.assertIn(p, P.travelling[1])
         self.assertEqual(c.boarding, [{"id": p.id, "dir": 1}])
         self.assertEqual(c.load, 1)
-        p.alight(15)
-        self.assertEqual((p.TrT, p.TTD), (8, 15))
-        self.assertEqual(p.WT_board + p.TrT, p.TTD)
+        p.alight(15, 13)                 # [A7] destination doors start opening at 13
+        self.assertEqual((p.DAT, p.TrT, p.TTD), (13, 8, 13))
+        self.assertEqual(p.WT + p.TrT, p.TTD)
 
     def test_same_floor_including_zero_and_fractional_opening(self):
         for opening, ts, bt in ((0, 1, 0), (2, 1, 2), (1.5, 1, 2), (0.5, 0.25, 0.5)):
@@ -148,7 +148,8 @@ class PassengerWaitingTimeTests(unittest.TestCase):
         self.assertEqual(p.WT, 5)
         self.assertEqual(c.load, 1)
         finish_boarding(c, HC, P, clock)
-        self.assertEqual((alighter.DAT, p.BT, c.load), (7, 7, 1))
+        # [A7] DAT = opening start (5); the physical alight still happens at 7
+        self.assertEqual((alighter.DAT, alighter.TTD, p.BT, c.load), (5, 6, 7, 1))
         self.assertIn(alighter, P.served[1])
         self.assertIn(p, P.travelling[1])
 

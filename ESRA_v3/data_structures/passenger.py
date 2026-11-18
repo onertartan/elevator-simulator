@@ -3,6 +3,7 @@ from typing import Optional
 from .hall_call import HallCall
 
 WAITING_TIME_ENDPOINT = "pickup_door_opening_start"
+TRANSIT_TIME_ENDPOINT = "destination_door_opening_start"   # [A7]
 
 
 class Passenger(HallCall):
@@ -17,9 +18,14 @@ class Passenger(HallCall):
         WT_board: Queue join until boarding (BT - QJT), the animation-aligned
             secondary measure. BT remains the fully-open/transfer-start event.
         DF: Destination floor.
-        DAT: Destination arrival time.
-        TrT: Transit time (DAT - BT).
-        TTD: Total time to destination (DAT - QJT).
+        DAT: Destination arrival time: opening START of the drop-off door
+            cycle at the destination floor (ISO 8100-32, 3.33) [A7].
+        TrT: Transit time (ISO 8100-32, 3.35): pickup opening start (or the
+            queue join, if the passenger arrived during opening) until DAT.
+        TTD: Time to destination (DAT - QJT) = WT + TrT exactly [A7].
+            Before [A7] DAT/TrT were taken at fully-open doors and
+            TTD = WT_board + TrT; the durations of TrT are unchanged, only
+            their endpoints moved by the destination door-opening time.
     """
 
     _id_counter: int = 0  # independent counter from HallCall
@@ -90,17 +96,36 @@ class Passenger(HallCall):
         cls._id_counter += 1
         return cls._id_counter
 
-    def alight(self, current_time: float) -> "Passenger":
+    def alight(self, current_time: float,
+               destination_opening_start: Optional[float] = None) -> "Passenger":
         """
-        Mark that the passenger has reached the destination.
+        Mark that the passenger has reached the destination. [A7] ISO 8100-32
+        endpoints: DAT is the instant the car's doors BEGIN to open at the
+        destination floor (3.33 time to destination), TrT runs from the
+        pickup opening start - or the queue join, if later (3.35 NOTE) - to
+        that instant, so TTD = DAT - QJT = WT + TrT holds exactly.
 
         Args:
-            current_time: The time passenger arrived to destination.
+            current_time: Tick at which the engine processes the alighting
+                (doors fully open); kept as the fallback when the car gave
+                no opening-start timestamp (instantaneous service, cabin
+                passengers loaded from an initials file).
+            destination_opening_start: Opening start of the drop-off door
+                cycle at the destination floor (Car.doorOpeningStartTime).
 
         Returns:
             self (for chaining).
         """
-        self.DAT = float(current_time)
+        arrival = (float(destination_opening_start)
+                   if destination_opening_start is not None else float(current_time))
+        if not math.isfinite(arrival):
+            raise ValueError("destination arrival time must be finite")
+        self.DAT = arrival
         self.TTD = float(self.DAT - self.QJT)
-        self.TrT = float(self.DAT - self.BT) if self.BT is not None else None
+        if self.doorOpeningStartTime is not None:
+            self.TrT = float(self.DAT - max(self.QJT, self.doorOpeningStartTime))
+        elif self.BT is not None:
+            self.TrT = float(self.DAT - self.BT)
+        else:
+            self.TrT = None
         return self
