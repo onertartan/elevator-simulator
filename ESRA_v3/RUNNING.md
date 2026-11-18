@@ -618,3 +618,51 @@ for anyone touching the loop in `experiment.py` / `controller.py`:
   the tick loop's trajectory exactly; the acceptance test is
   `analysis/headless_benchmark.py --event-mode` matching the tick-mode output
   on all 20 seeds. Not implemented yet.
+
+## 14. CC rule of the exact-solution reference vs the engine (2026-11-18)
+
+`analysis/esra_dp_ref.py` is the reference implementation of the two-layer
+dynamic-programming method planned for the exact solvers: an outer layer that
+splits the OD groups over the cars and an inner layer that finds, per car, the
+cheapest stop sequence under the three control approaches (CC, PR, PRR) for
+both objectives (WT, TT). It is the code appendix of the method note "ESRA:
+Dinamik Programlama ile Kesin Çözüm Yöntemi" (version 3), copied verbatim, so
+its comments and messages are in Turkish. It is **not engine code**: standard
+library only, simplified physics (the car starts at an integer floor with
+closed doors; 2 s per floor, 7 s per stop; waiting and riding end at
+door-opening start).
+
+```bash
+python analysis/esra_dp_ref.py           # its own checks, about 2 minutes
+python tests/test_cc_rule_vs_engine.py   # the CC rule against the engine, < 1 s
+```
+
+`tests/test_cc_rule_vs_engine.py` ties the CC rule of that code to the real
+engine (fixture of `tests/test_pending_board_direction.py`: one car, real
+`Car` / `Controller`, experiment tick order). One empty car at an integer
+floor, every passenger assigned to it at t=0. In each of 1000 random scenarios
+(6-10 floors, 1-5 passengers) the `WT` and `TTD` the engine measures for every
+passenger equal the boarding and alighting times of one of the stop plans the
+rule allows. The rule allows more than one plan only where an empty car has
+assigned work on both sides (387 of the 1000 scenarios); there the direction
+is the RL policy's decision (K20), and the engine's own choice is one of the
+allowed plans.
+
+The part of the rule this pins down is the stop at which the cabin becomes
+empty:
+
+| Assigned work ahead in the travel direction? | Engine and rule |
+| --- | --- |
+| yes (a same-direction call at this floor, or any call further on) | the car keeps its direction; an opposite-direction call at this floor is not taken in this stop |
+| no | the car reverses in this stop; the opposite-direction call at this floor is accepted in the same door cycle, no extra time |
+
+Example (empty car at 2; p: 3 -> 5, g: 5 -> 3): g is accepted at t=13, the
+moment the car arrives at 5 with p, and reaches 3 at t=24. With a third
+passenger q: 6 -> 7 the car goes on to 6 and 7 first and g is accepted at
+t=42. An earlier draft of the rule (boarding only in the arrival direction, a
+second stop for the other direction) disagreed with the engine in 58 of 300
+random scenarios.
+
+Not covered: cars that start loaded, moving or inside a door cycle; the
+capacity limit; several cars. PR and PRR are not engine modes, so their rules
+in `esra_dp_ref.py` cannot be checked against the engine yet.
