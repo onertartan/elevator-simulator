@@ -24,6 +24,16 @@ per-tick updateCarStatesForNextDecision after operate. A freshly
 assigned car therefore starts moving in the SAME tick it is
 dispatched, exactly as in Dispatcher.m. The test suite's reference
 trip reflects this (boarding at t=2).
+
+  [A6] assign_call(): the single place that writes carId to a hall call
+       and its waiting passengers. Passengers a car has already accepted
+       for boarding (doorOpeningStartTime set, i.e. they sit in that
+       car's pendingBoard while the doors open) keep their accepting
+       car. Before [A6] every dispatcher rewrote carId for ALL waiting
+       passengers at the call floor, so a new same-floor/same-direction
+       call registered during the 2 s door-opening window could hand
+       accepted passengers to a second car; both cars then boarded them
+       (duplicate rows in P.served - see RUNNING.md section 11).
 """
 from abc import abstractmethod
 from typing import Any, List
@@ -41,6 +51,29 @@ class Dispatcher(DecisionMaker):
     def dispatch(self, building: Building, cars: List[Car], HC: HallCallLists, P: PassengerLists,
                  traffic: Any = None) -> None:
         """Calculate Figures of Suitability (FS) and assign calls to cars."""
+
+    @staticmethod
+    def assign_call(hall_call: Any, dir_: int, car_id: int, P: PassengerLists) -> int:
+        """[A6] Assign a waiting hall call and the waiting passengers it
+        covers (same floor, same direction) to car_id.
+
+        Passengers already accepted by a car for boarding (their
+        doorOpeningStartTime is set) are left with their accepting car:
+        the pickup has physically started and the car will board them
+        when its doors are open. Returns the number of such passengers
+        that were skipped. Every dispatcher must write carId through
+        this helper so the rule lives in one place.
+        """
+        hall_call.carId = car_id
+        skipped = 0
+        for passenger in P.waiting[dir_]:
+            if passenger.floor != hall_call.floor:
+                continue
+            if getattr(passenger, "doorOpeningStartTime", None) is not None:
+                skipped += 1
+                continue
+            passenger.carId = car_id
+        return skipped
 
     def run(self, building: Any, cars: List[Car], HC: HallCallLists, P: PassengerLists) -> None:
         """

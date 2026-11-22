@@ -278,6 +278,9 @@ Primary passenger `WT` and `Pawt` now end when the doors of the car that
 **accepts that passenger** start opening at pickup. A full car that refuses
 the passenger does not end their wait. A passenger joining that accepting
 service while its doors are opening or open has zero primary wait.
+(Refined by [A8], section 15: a passenger accepted later than the opening
+start, into a cycle whose doors are already opening or open, stops waiting
+at the acceptance.)
 This adopts the waiting-time endpoint of ISO 8100-32:2020, 3.40
 ([definition](https://cdn.standards.iteh.ai/samples/73084/bc9b7ff8d7e7420f95430ea15e57b3c1/ISO-8100-32-2020.pdf#page=13));
 it is not a claim that the whole simulator implements that standard.
@@ -297,6 +300,8 @@ timing, and animations are unchanged. Passengers still become `travelling`
 at fully-open doors (transfer-animation start), not at opening start or at
 transfer end. Consequently `TTD = WT_board + TrT`; it is not generally
 `WT + TrT`. Destination-arrival timing has not been redefined.
+(Superseded by [A7], section 12: `DAT` and `TrT` now use the ISO 8100-32
+endpoints as well, and `TTD = WT + TrT` holds exactly.)
 
 The GUI reports both waiting measures. Results Excel files keep the original
 passenger/HC tables in their original positions and append an
@@ -455,3 +460,249 @@ These checks use small fixtures and temporary outputs. The default 1000-restart
 measurement-loop test mocks the HC run; it does not perform a large calibration.
 No large experiment or difficulty-band calibration was run for this change.
 The pre-existing renderer-test issue recorded in section 7 was not addressed.
+
+## 10. Direction during the pre-boarding window ([A5], 2026-10-18)
+
+`Car.updateState()` now counts the destinations of the passengers already
+selected for boarding (`pendingBoard`) as cabin destinations when it derives
+the movement state. Car.m boarded at arrival, so the original `updateState`
+saw the new DF in the arrival tick. Phased boarding ([A4], section 1 of
+PROJECT_STATUS.md) answers the hall call at arrival but defers DF/load to the
+door-open moment (arrival + doorOpeningTime). In between, the car had neither
+an assigned hall call nor a DF, and `updateState` dropped it to `state=0`.
+A decision falling inside that window (every `arrivalRate` tick with the
+default "dispatch when new call registered" setting) derived the direction
+from the other assigned calls alone.
+
+Observed on the unpatched engine (doors 2+3+2, Ts=1, car arrives at 5 for a
+5 -> 6 passenger at t=5, pickup t=6, boarding t=8, departure t=13):
+
+| Decision at t=7 assigns to the same car | Before | After |
+| --- | --- | --- |
+| down call 3 -> 1 | `state` -1 at once; after boarding the "-1" branch keeps it (call below): the car leaves **downwards** with the 5 -> 6 passenger, serves 3, then climbs to 6 | `state` stays +1; 6 first, then -1 for 3 |
+| down call 5 -> 2 (same floor) | `isAtHC`'s state-0 term fires: `beginPickup` restarts the counter, both passengers board, the 5 -> 2 passenger rides 5 -> 6 -> 2, departure one tick later | call not taken in this stop; served on the way back (state -1 after 6) |
+| up call 5 -> 7 (same floor) | joins the stop (counter restart, both board) | unchanged |
+
+Movement is not affected: `Controller.operate` never moves a car while
+`stopOverCounter != 0`, whatever its state, so a +1/-1 state during a door
+cycle only decides where the car goes once the counter reaches 0 (this was
+already the case for loaded cars and for drop-offs with calls ahead).
+
+Scope: a decision is not even needed. The per-tick state update at the end
+of the pickup tick already consulted the car's *other* assigned calls: with
+no call ahead and one behind, the unpatched car reversed before the
+accepted passengers had boarded. One decision at t=0, idle car at 4.0
+assigned both 5 -> 6 and 2 -> 1: before, it picked up at 5, turned, served 2
+and delivered the first passenger at t=32; after, it delivers at t=13 and
+serves 2 on the way down. Any one-shot assignment that gives an idle car
+calls on both sides (nearest-car, GA and exact all do) executes differently
+in the simulator; the static objective values (objFunDestination, exact DP,
+GA fitness) are unchanged, since they already model a car continuing in the
+boarding passengers' direction. `analysis/headless_benchmark.py` prints the
+simulated metrics on both revisions; the pull request that introduced [A5]
+records the observed differences.
+
+Regression tests: `tests/test_pending_board_direction.py` (5 tests; three of
+them fail on the unpatched engine, two pin the unchanged behaviours).
+
+## 11. Accepted passengers are never reassigned ([A6], 2026-10-31)
+
+`Dispatcher.assign_call(hall_call, dir_, car_id, P)` is now the single
+place that writes `carId` to a hall call and to the waiting passengers it
+covers. Passengers whose pickup has already started (`doorOpeningStartTime`
+set: they sit in the accepting car's `pendingBoard` while its doors open,
+[A4]) keep their accepting car; the helper returns how many it skipped.
+`NearestCarDispatcher` and `MetaheuristicDispatcher._assignDirection` call
+it; a dispatcher that writes `carId` directly bypasses the rule.
+
+The race. `beginPickup` answers the hall call at arrival (counter 7) but the
+accepted passengers stay in `P.waiting` until the doors are open (counter 5,
+section 7). A new call registered at the same floor and direction inside
+that window is a fresh `HallCall`; before [A6] every dispatcher rewrote
+`carId` for all waiting passengers at that floor, accepted ones included.
+When the second car arrived (or was already standing there), its
+`beginPickup` accepted them as well: both cars boarded and delivered them,
+and `P.served` carried duplicate rows (`dup` column of
+`analysis/headless_benchmark.py`). The nearest-car tie-break makes this
+easy to hit: equal FS and equal distance are resolved by the smaller
+`stopOverCounter`, so a car with a closed door cycle at the same floor beats
+the car whose doors are opening. First observed as `dup = 1` for traffic
+seed 1 on main (before [A5]); on the [A5] engine the same race shows as
+`dup = 2` for seed 17 (two cars at floor 7 going down, t = 400) and `dup = 1`
+for seed 20 with `decisionPeriod = 1`.
+
+Safety net: `Car.beginPickup` raises `RuntimeError` when a waiting
+passenger assigned to the car already has `doorOpeningStartTime` set but is
+not in the car's own `pendingBoard` - i.e. a dispatcher handed it an
+accepted passenger. With `assign_call` this cannot happen; the check turns
+a silent double boarding by a new (e.g. RL) dispatcher into an error.
+
+What is unchanged: waiting-time endpoints, boarding/alighting timing,
+`WT_board` counting while the passenger remains in the waiting lists, the
+GA/exact snapshot checks (objFunDestination and the exact dispatcher still
+reject snapshots taken during pending boarding - that is a separate issue,
+see `CIFT_BINIS_GA_REDDI_VE_ESIT_UZAKLIK_NOTU_2026-10-31.md`), and every
+assignment in which no accepted passenger is involved. Over the 20-seed
+benchmark only the three rows that reported a duplicate change; every other
+row is identical before and after.
+
+Regression tests: `tests/test_accepted_passenger_reassignment.py` (4 tests,
+all fail on the pre-[A6] engine): the helper leaves accepted passengers
+alone; the two-car reproduction boards each passenger exactly once; the
+legacy write path trips the `beginPickup` safety net; periodic traffic
+seeds 1-20 report `dup = 0` and `unserved = 0`.
+`python analysis/headless_benchmark.py --strict` exits 1 if any row reports
+`dup > 0` or `unserved > 0`.
+
+## 12. Transit time and time to destination on ISO endpoints ([A7], 2026-10-31)
+
+Section 7 aligned the primary waiting time with ISO 8100-32 (3.40) but left
+`DAT`, `TrT` and `TTD` on the animation events (doors fully open), so the
+three metrics mixed two endpoint systems and `TTD = WT_board + TrT`, not
+`WT + TrT`. [A7] moves the remaining two to the standard:
+
+| Metric | ISO 8100-32 | Start | End |
+| --- | --- | --- | --- |
+| `WT` | 3.40 waiting time | queue join (QJT) | accepting car begins to open its doors at the boarding floor |
+| `TrT` | 3.35 transit time | that opening start - or QJT, if the passenger joined while the doors were opening/open (3.35 NOTE); since [A8] the acceptance, if later (section 15) | doors begin to open at the destination floor |
+| `TTD` | 3.33 time to destination | QJT | doors begin to open at the destination floor |
+
+`Passenger.alight(current_time, destination_opening_start)` now records
+`DAT` as the opening start of the drop-off cycle (`Car.doorOpeningStartTime`,
+passed by `Car.updateDoorCycle`), `TrT = DAT - max(QJT, doorOpeningStartTime)`
+and `TTD = DAT - QJT`. Hence `TTD = WT + TrT` exactly, for every passenger,
+including those who joined during opening (both WT and the max() term see
+QJT). Records carry `transit_time_endpoint = "destination_door_opening_start"`
+next to `waiting_time_endpoint`.
+
+What changes numerically: `DAT` and `TTD` are shorter by the destination
+door-opening time (2 s with the default physics; less if that cycle was
+already opening); `TrT` durations are unchanged except for passengers who
+joined an opening/open pickup, whose transit no longer includes the part of
+the opening that preceded their arrival. The physical alighting (list
+transfers, load, animation) still happens at fully-open doors; `BT` and
+`WT_board` are untouched. Cabin passengers loaded from an initials file
+(`QJT = BT = -1`, no pickup opening) fall back to `TrT = DAT - BT`;
+`alight()` called without an opening start (older call sites, tests) keeps
+`DAT = current_time`.
+
+Updated expectations: `tests/test_passenger_waiting_time.py`,
+`tests/test_experiment_smoke.py` (DAT 15 -> 13, TTD = WT + TrT), the Excel
+"Metric definitions" sheet. `analysis/headless_benchmark.py` TTD/last_DAT
+columns drop by 2 s relative to the [A6] output; WT, WT_board and TrT rows
+are identical.
+
+## 13. RL environment design documents (2026-11-07)
+
+The design contract for the reinforcement-learning environment that will be
+built on this engine lives in `ESRA_v3/docs/`:
+
+- `RL_ORTAMI_TASARIM_DEVIR_v3.2.md` - the full design handover document
+  (Turkish): SMDP decision epochs, two-phase decision step (K13), observation
+  and action spaces, reward, control modes, decision table K1-K25.
+- `RL_TASARIM_EK_K24_2026-10-31.md` - addendum K24: an OD group a car has
+  accepted (door opening started, [A6]) is locked to that car in the phase-0
+  mask.
+
+Two engine facts recorded in v3.2 (section 3.1 and 3.5, decision K25) matter
+for anyone touching the loop in `experiment.py` / `controller.py`:
+
+- The engine is a **fixed-increment** (time-stepped, `Ts = 1 s`) simulation
+  of a discrete-event system, not a next-event simulator: `Controller.operate`
+  advances `time += Ts` and every tick re-evaluates every car. Randomness
+  enters only through passenger generation (origin-destination drawn from the
+  route-probability matrix); arrivals are periodic (`arrivalRate` is a period,
+  not a Poisson rate).
+- A headless **next-event** advance mode is planned for RL training and batch
+  evaluation (GUI off): jump to the earliest of the per-car events (arrival at
+  the next stop floor, counter transitions 7->5->2->0) and system events (next
+  passenger arrival, GA decision period), update positions in closed form, then
+  process that instant in the same order the tick loop uses. It must reproduce
+  the tick loop's trajectory exactly; the acceptance test is
+  `analysis/headless_benchmark.py --event-mode` matching the tick-mode output
+  on all 20 seeds. Not implemented yet.
+
+## 14. CC rule of the exact-solution reference vs the engine (2026-11-18)
+
+`analysis/esra_dp_ref.py` is the reference implementation of the two-layer
+dynamic-programming method planned for the exact solvers: an outer layer that
+splits the OD groups over the cars and an inner layer that finds, per car, the
+cheapest stop sequence under the three control approaches (CC, PR, PRR) for
+both objectives (WT, TT). It is the code appendix of the method note "ESRA:
+Dinamik Programlama ile Kesin Çözüm Yöntemi" (version 3), copied verbatim, so
+its comments and messages are in Turkish. It is **not engine code**: standard
+library only, simplified physics (the car starts at an integer floor with
+closed doors; 2 s per floor, 7 s per stop; waiting and riding end at
+door-opening start).
+
+```bash
+python analysis/esra_dp_ref.py           # its own checks, about 2 minutes
+python tests/test_cc_rule_vs_engine.py   # the CC rule against the engine, < 1 s
+```
+
+`tests/test_cc_rule_vs_engine.py` ties the CC rule of that code to the real
+engine (fixture of `tests/test_pending_board_direction.py`: one car, real
+`Car` / `Controller`, experiment tick order). One empty car at an integer
+floor, every passenger assigned to it at t=0. In each of 1000 random scenarios
+(6-10 floors, 1-5 passengers) the `WT` and `TTD` the engine measures for every
+passenger equal the boarding and alighting times of one of the stop plans the
+rule allows. The rule allows more than one plan only where an empty car has
+assigned work on both sides (387 of the 1000 scenarios); there the direction
+is the RL policy's decision (K20), and the engine's own choice is one of the
+allowed plans.
+
+The part of the rule this pins down is the stop at which the cabin becomes
+empty:
+
+| Assigned work ahead in the travel direction? | Engine and rule |
+| --- | --- |
+| yes (a same-direction call at this floor, or any call further on) | the car keeps its direction; an opposite-direction call at this floor is not taken in this stop |
+| no | the car reverses in this stop; the opposite-direction call at this floor is accepted in the same door cycle, no extra time |
+
+Example (empty car at 2; p: 3 -> 5, g: 5 -> 3): g is accepted at t=13, the
+moment the car arrives at 5 with p, and reaches 3 at t=24. With a third
+passenger q: 6 -> 7 the car goes on to 6 and 7 first and g is accepted at
+t=42. An earlier draft of the rule (boarding only in the arrival direction, a
+second stop for the other direction) disagreed with the engine in 58 of 300
+random scenarios.
+
+Not covered: cars that start loaded, moving or inside a door cycle; the
+capacity limit; several cars. PR and PRR are not engine modes, so their rules
+in `esra_dp_ref.py` cannot be checked against the engine yet.
+
+## 15. Waiting ends at acceptance in an already open door cycle ([A8], 2026-11-22)
+
+A car can accept a waiting passenger after its doors have started opening at
+that floor, in the same door cycle (a same-floor re-pickup before closing
+starts). This happens when the assignment changes during the stop: the
+passenger is assigned to this car while its doors are opening or open, or the
+car's work ahead is given to another car, so the car turns at this floor and
+takes the opposite-direction passengers waiting there. Before [A8] the
+engine ended such a passenger's primary `WT` at the cycle's original opening
+start (section 7), i.e. at a moment when the passenger could not yet board
+this car: a car whose doors start opening at t=13 and accepts at t=15 a
+passenger waiting since t=0 recorded `WT = 13`. A dispatcher that reassigns
+calls could therefore remove real waiting from the measure, up to 4 s per
+passenger with the default door times (2 s opening + 3 s transfer, 1 s
+ticks); with fixed assignments the case never arises.
+
+[A8] ends the wait at the acceptance instead. `Car.beginPickup` passes the
+current time to `Passenger.start_pickup(doorOpeningStartTime, accepted_at)`,
+which records `pickupStartTime = max(doorOpeningStartTime, accepted_at)`;
+`WT = max(QJT, pickupStartTime) - QJT` and `TrT = DAT - max(QJT,
+pickupStartTime)`, so `TTD = WT + TrT` still holds exactly. The passenger's
+`doorOpeningStartTime` keeps the car's opening start (it still marks the
+passenger as accepted for [A6]); records keep `waiting_time_endpoint =
+"pickup_door_opening_start"`, the endpoint of every passenger accepted at the
+opening. Movement, door timing, `BT`, `WT_board`, `DAT` and `TTD` are
+unchanged; a passenger who joins during opening/open and is accepted on
+arrival still waits zero.
+
+Effect on the headless scenarios (all `initials_files` snapshots and 20
+traffic seeds, Nearest Car, decision at new calls and every tick; 5176
+passengers): `WT` grows for 45 passengers (0.9 %) by 1-4 s and their `TrT`
+shrinks by the same amount; every other value is identical.
+
+```bash
+python tests/test_wt_midcycle_acceptance.py   # both cases, t = 13..18
+```

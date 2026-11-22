@@ -78,12 +78,9 @@ class NearestCarDispatcher(Dispatcher):
                             assigned_cars[i] = j
 
             # Apply assigned car IDs to hall calls and associated passengers
+            # ([A6]: passengers already accepted by a car keep that car)
             for i, hall_call in enumerate(waiting_calls):
-                best_car_id = cars[assigned_cars[i]].id
-                hall_call.carId = best_car_id
-                for passenger in P.waiting[dir_]:
-                    if passenger.floor == hall_call.floor:
-                        passenger.carId = best_car_id
+                self.assign_call(hall_call, dir_, cars[assigned_cars[i]].id, P)
 
             self.FS[dir_] = f
 

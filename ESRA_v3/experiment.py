@@ -452,8 +452,10 @@ class Experiment:
                  "the passenger; zero if joining its opening/open phase."),
                 ("Passenger wait to boarding", "WT_board = BT - QJT; boarding at fully-open doors."),
                 ("Hall-call WT", "Unchanged call-response timing; not passenger weighted."),
-                ("BT / DAT / TrT / TTD", "Unchanged animation events; "
-                 "TTD = WT_board + TrT, not generally WT + TrT."),
+                ("BT", "Boarding at fully-open doors (animation event)."),
+                ("DAT / TrT / TTD", "ISO 8100-32 endpoints [A7]: DAT = opening start at the "
+                 "destination floor; TrT = DAT - max(QJT, pickup opening start); "
+                 "TTD = DAT - QJT = WT + TrT exactly."),
             ], columns=["Metric", "Definition (seconds)"]).to_excel(
                 writer, sheet_name="Metric definitions", index=False)
 
