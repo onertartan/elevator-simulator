@@ -278,6 +278,9 @@ Primary passenger `WT` and `Pawt` now end when the doors of the car that
 **accepts that passenger** start opening at pickup. A full car that refuses
 the passenger does not end their wait. A passenger joining that accepting
 service while its doors are opening or open has zero primary wait.
+(Refined by [A8], section 15: a passenger accepted later than the opening
+start, into a cycle whose doors are already opening or open, stops waiting
+at the acceptance.)
 This adopts the waiting-time endpoint of ISO 8100-32:2020, 3.40
 ([definition](https://cdn.standards.iteh.ai/samples/73084/bc9b7ff8d7e7420f95430ea15e57b3c1/ISO-8100-32-2020.pdf#page=13));
 it is not a claim that the whole simulator implements that standard.
@@ -561,7 +564,7 @@ three metrics mixed two endpoint systems and `TTD = WT_board + TrT`, not
 | Metric | ISO 8100-32 | Start | End |
 | --- | --- | --- | --- |
 | `WT` | 3.40 waiting time | queue join (QJT) | accepting car begins to open its doors at the boarding floor |
-| `TrT` | 3.35 transit time | that opening start - or QJT, if the passenger joined while the doors were opening/open (3.35 NOTE) | doors begin to open at the destination floor |
+| `TrT` | 3.35 transit time | that opening start - or QJT, if the passenger joined while the doors were opening/open (3.35 NOTE); since [A8] the acceptance, if later (section 15) | doors begin to open at the destination floor |
 | `TTD` | 3.33 time to destination | QJT | doors begin to open at the destination floor |
 
 `Passenger.alight(current_time, destination_opening_start)` now records
@@ -666,3 +669,40 @@ random scenarios.
 Not covered: cars that start loaded, moving or inside a door cycle; the
 capacity limit; several cars. PR and PRR are not engine modes, so their rules
 in `esra_dp_ref.py` cannot be checked against the engine yet.
+
+## 15. Waiting ends at acceptance in an already open door cycle ([A8], 2026-11-22)
+
+A car can accept a waiting passenger after its doors have started opening at
+that floor, in the same door cycle (a same-floor re-pickup before closing
+starts). This happens when the assignment changes during the stop: the
+passenger is assigned to this car while its doors are opening or open, or the
+car's work ahead is given to another car, so the car turns at this floor and
+takes the opposite-direction passengers waiting there. Before [A8] the
+engine ended such a passenger's primary `WT` at the cycle's original opening
+start (section 7), i.e. at a moment when the passenger could not yet board
+this car: a car whose doors start opening at t=13 and accepts at t=15 a
+passenger waiting since t=0 recorded `WT = 13`. A dispatcher that reassigns
+calls could therefore remove real waiting from the measure, up to 4 s per
+passenger with the default door times (2 s opening + 3 s transfer, 1 s
+ticks); with fixed assignments the case never arises.
+
+[A8] ends the wait at the acceptance instead. `Car.beginPickup` passes the
+current time to `Passenger.start_pickup(doorOpeningStartTime, accepted_at)`,
+which records `pickupStartTime = max(doorOpeningStartTime, accepted_at)`;
+`WT = max(QJT, pickupStartTime) - QJT` and `TrT = DAT - max(QJT,
+pickupStartTime)`, so `TTD = WT + TrT` still holds exactly. The passenger's
+`doorOpeningStartTime` keeps the car's opening start (it still marks the
+passenger as accepted for [A6]); records keep `waiting_time_endpoint =
+"pickup_door_opening_start"`, the endpoint of every passenger accepted at the
+opening. Movement, door timing, `BT`, `WT_board`, `DAT` and `TTD` are
+unchanged; a passenger who joins during opening/open and is accepted on
+arrival still waits zero.
+
+Effect on the headless scenarios (all `initials_files` snapshots and 20
+traffic seeds, Nearest Car, decision at new calls and every tick; 5176
+passengers): `WT` grows for 45 passengers (0.9 %) by 1-4 s and their `TrT`
+shrinks by the same amount; every other value is identical.
+
+```bash
+python tests/test_wt_midcycle_acceptance.py   # both cases, t = 13..18
+```

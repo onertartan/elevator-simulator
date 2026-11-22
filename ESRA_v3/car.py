@@ -230,7 +230,9 @@ class Car:
         A same-floor pickup during opening/transfer belongs to the already
         available service, even though the legacy counter restarts. During
         closing (or after departure) it is a new opening event. Passengers
-        already accepted keep their own original event timestamp.
+        already accepted keep their own original event timestamp. [A8] A
+        passenger accepted later in such a cycle stops waiting at its own
+        acceptance (Passenger.start_pickup), not at the original opening.
         """
         if not (self.doorOpeningStartTime is not None
                 and self._doorCycleFloor == self.floor
@@ -352,7 +354,9 @@ class Car:
             check and leftover hall-call recreation (identical timing);
           - the selected passengers go to pendingBoard but STAY in the
             waiting lists. Primary WT freezes at this accepting service's
-            opening start; WT_board keeps counting until actual boarding;
+            opening start ([A8]: or at the acceptance, if the passenger
+            is accepted later into an already opening/open cycle);
+            WT_board keeps counting until actual boarding;
           - board()/transfers/load/DF happen in updateDoorCycle at the
             door-open moment, AFTER the alighting block, so on combined
             stops the load never exceeds capacity any more (this
@@ -409,7 +413,8 @@ class Car:
         if num_accept:
             self._startDoorCycle(currentTime)
         for passenger in passengers_here[:num_accept]:
-            passenger.start_pickup(self.doorOpeningStartTime)
+            # [A8] accepted now: in an already open cycle the wait ends here
+            passenger.start_pickup(self.doorOpeningStartTime, currentTime)
             self.pendingBoard.append({"p": passenger, "dir": dir_})
 
     def updateState(self, updateType: str) -> None:
